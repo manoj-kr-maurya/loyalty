@@ -1,0 +1,477 @@
+// This is your Prisma schema file,
+// learn more about it in the docs https//pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("LSB_PG_URL")
+}
+
+// --------------------------------------------------------
+// Models -----------------------------
+// --------------------------------------------------------
+
+model Organization {
+  id   String  @id @default(uuid())
+  name String?
+
+  phoneNumber        String                      @unique()
+  countryCode        String
+  isVerified         Boolean                     @default(false)
+  kycStatus          Boolean                     @default(false)
+  token              String                      @default("")
+  createdAt          DateTime                    @default(now())
+  updatedAt          DateTime                    @updatedAt
+  isSoftDeleted      Boolean                     @default(false)
+  metaFlags          MetaFlagsForOrganization?
+  role               OrganizationRoles           @default(ADMIN)
+  orgAdminId         String?
+  fcmToken           String?
+  address            String?
+  logoUrl            String?
+  coverUrl           String?
+  upiURI             String?
+  operationalHours   String?
+  aboutUs            String?
+  contactUs          String?
+  currencies         Currency[]
+  currencyBuckets    CurrencyBucket[] // decoupling of currency buckets from currency so that an org can use another org's currencny.
+  organizationOrders OrganizationOrder[]
+  campaigns          OrganizationCampaign[]
+  customerOrgOrders  CustomerOrganizationOrder[]
+
+  @@index([phoneNumber])
+  @@index([countryCode])
+  @@map("organization")
+}
+
+model MetaFlagsForOrganization {
+  id                        String       @id @default(uuid())
+  initJourneyCompleted      Boolean      @default(false)
+  firstCampaignCreated      Boolean      @default(false)
+  firstCurrencyAdded        Boolean      @default(false)
+  firstCurrencyBalanceAdded Boolean      @default(false)
+  organization              Organization @relation(fields: [organizationId], references: [id])
+  organizationId            String       @unique
+
+  @@map("metaFlagsForOrganization")
+}
+
+model Customer {
+  id                String                      @id @default(uuid())
+  name              String?
+  phoneNumber       String                      @unique()
+  countryCode       String
+  isVerified        Boolean                     @default(false)
+  metaFlags         MetaFlagsForCustomer?
+  token             String                      @default("")
+  createdAt         DateTime                    @default(now())
+  updatedAt         DateTime                    @updatedAt
+  fcmToken          String?
+  logoUrl           String?
+  customerOrgOrders CustomerOrganizationOrder[]
+  customerWallet    CustomerWallet[]
+
+  @@map("customer")
+}
+
+model MetaFlagsForCustomer {
+  id                   String   @id @default(uuid())
+  initJourneyCompleted Boolean  @default(false)
+  customer             Customer @relation(fields: [customerId], references: [id])
+  customerId           String   @unique
+
+  @@map("metaFlagsForCustomer")
+}
+
+model OrganizationCampaign {
+  id                String       @id @default(uuid())
+  organization      Organization @relation(fields: [organizationId], references: [id])
+  organizationId    String
+  name              String
+  earningPercentage Int
+  currencyCode      String
+  startDate         DateTime     @default(now())
+  endDate           DateTime     @default(now())
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  isSoftDeleted     Boolean      @default(false)
+
+  earningExpiresIn         Int          @default(30)
+  earningCoinAmountDetails EarningCoinAmountDetail[]
+
+  @@unique([organizationId, name], name: "unique_organization_campaign_name")
+  @@index([organizationId], name: "organization_campaign_idx")
+  @@map("organizationCampaign")
+}
+
+model Currency {
+  id             String         @id @default(uuid())
+  name           String
+  code           String         @unique
+  symbol         String         @default("_")
+  exchangeRates  ExchangeRate[]
+  organization   Organization   @relation(fields: [organizationId], references: [id])
+  organizationId String
+
+  @@map("currency")
+}
+
+model ExchangeRate {
+  id                   String   @id @default(uuid())
+  currency             Currency @relation(fields: [currencyId], references: [id])
+  currencyId           String
+  physicalCurrencyCode String   @default("INR")
+  rate                 Decimal  @default(1) @db.Decimal(10, 6)
+  updatedAt            DateTime @updatedAt
+  createdAt            DateTime @default(now())
+
+  @@unique([currencyId, physicalCurrencyCode], name: "currency_id_physical_currency_code")
+  @@map("exchangeRate")
+}
+
+model CurrencyBucket {
+  id                String                      @id @default(uuid())
+  code              String
+  availableAmount   Int                         @default(0)
+  distributedAmount Int                         @default(0)
+  receivedAmount    Int                         @default(0)
+  organization      Organization                @relation(fields: [organizationId], references: [id])
+  organizationId    String
+  transactions      CurrencyBucketTransaction[]
+
+  // Auto Top-Up Fields
+  autoTopUpEnabled   Boolean @default(false)
+  autoTopUpThreshold Int? // Trigger balance for top-up
+  autoTopUpAmount    Int? // Amount to top up
+
+  @@unique([organizationId, code], name: "organization_id_currency_code")
+  @@map("currencyBucket")
+}
+
+model CurrencyBucketTransaction {
+  id               String                                @id @default(uuid())
+  currencyBucketId String
+  amount           Int
+  status           CustomerWalletPocketTransactionStatus
+  transactionRef   String
+  reversalTime     DateTime?
+  createdAt        DateTime                              @default(now())
+  updatedAt        DateTime                              @updatedAt
+  currencyBucket   CurrencyBucket                        @relation(fields: [currencyBucketId], references: [id])
+
+  @@map("currencyBucketTransaction")
+}
+
+model OrganizationOrder {
+  id             String                           @id @default(uuid())
+  organizationId String
+  transactionId  String
+  orderType      OrganizationOrderType
+  orderStatus    OrganizationOrderStatus
+  details        OrderDetails?
+  createdAt      DateTime                         @default(now())
+  updatedAt      DateTime                         @updatedAt
+  amount         Float
+  statusHistory  OrganizationOrderStatusHistory[]
+  organization   Organization                     @relation(fields: [organizationId], references: [id])
+
+  @@map("organizationOrder")
+}
+
+model OrganizationOrderStatusHistory {
+  id                  String                  @id @default(uuid())
+  status              OrganizationOrderStatus
+  timestamp           DateTime
+  organizationOrder   OrganizationOrder       @relation(fields: [organizationOrderId], references: [id])
+  organizationOrderId String
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
+
+  @@map("organizationOrderStatusHistory")
+}
+
+model OrderDetails {
+  id                  String            @id @default(uuid())
+  currencyCode        String
+  organizationOrder   OrganizationOrder @relation(fields: [organizationOrderId], references: [id])
+  organizationOrderId String            @unique
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  @@map("orderDetail")
+}
+
+model CustomerWallet {
+  id               String                 @id @default(uuid())
+  availableBalance Int                    @default(0)
+  blockedBalance   Int                    @default(0)
+  pendingBalance   Int                    @default(0)
+  usedBalance      Int                    @default(0)
+  expiredBalance   Int                    @default(0)
+  customer         Customer               @relation(fields: [customerId], references: [id])
+  customerId       String
+  currencyCode     String
+  pockets          CustomerWalletPocket[]
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+
+  @@unique([customerId, currencyCode], name: "customer_id_currency_code")
+  @@index([customerId])
+  @@index([currencyCode])
+  @@map("customerWallet")
+}
+
+model CustomerWalletPocket {
+  id               String                            @id @default(uuid())
+  customerWalletId String
+  availableBalance Int                               @default(0)
+  blockedBalance   Int                               @default(0)
+  pendingBalance   Int                               @default(0)
+  usedBalance      Int                               @default(0)
+  expiredBalance   Int                               @default(0)
+  expiryDate       DateTime?
+  createdAt        DateTime                          @default(now())
+  updatedAt        DateTime                          @updatedAt
+  customerWallet   CustomerWallet                    @relation(fields: [customerWalletId], references: [id])
+  transactions     CustomerWalletPocketTransaction[]
+
+  @@index([customerWalletId])
+  @@map("customerWalletPocket")
+}
+
+// Rule 1: sum of all credit entries' availableReversalBalance should be equal to customerWallet's AvailableBalance
+
+model CustomerWalletPocketTransaction {
+  id                     String                                @id @default(uuid())
+  customerWalletPocketId String
+  amount                 Int
+  status                 CustomerWalletPocketTransactionStatus
+  transactionRef         String
+  createdAt              DateTime                              @default(now())
+  updatedAt              DateTime                              @updatedAt
+  customerWalletPocket   CustomerWalletPocket                  @relation(fields: [customerWalletPocketId], references: [id])
+
+  @@index([customerWalletPocketId])
+  @@map("customerWalletPocketTransaction")
+}
+
+model CustomerOrganizationOrder {
+  id                          String                                   @id @default(uuid())
+  customerId                  String
+  organizationId              String
+  customerBurningAmountDetail CustomerBurningAmountDetail?
+  physicalCurrency            String
+  status                      CustomerOrganizationOrderStatus
+  createdAt                   DateTime                                 @default(now())
+  updatedAt                   DateTime                                 @updatedAt
+  customerEarningAmountDetail CustomerEarningAmountDetail?
+  statusHistory               CustomerOrganizationOrderStatusHistory[]
+  organization                Organization                             @relation(fields: [organizationId], references: [id])
+  customer                    Customer                                 @relation(fields: [customerId], references: [id])
+
+  @@index([customerId])
+  @@index([organizationId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("customerOrganizationOrder")
+}
+
+model CustomerEarningAmountDetail {
+  id                          String                    @id @default(uuid())
+  totalAmount                 Float
+  createdAt                   DateTime                  @default(now())
+  updatedAt                   DateTime                  @updatedAt
+  coin                        EarningCoinAmountDetail[]
+  customerOrganizationOrder   CustomerOrganizationOrder @relation(fields: [customerOrganizationOrderId], references: [id])
+  customerOrganizationOrderId String                    @unique
+
+  @@map("customerEarningAmountDetail")
+}
+
+model CustomerBurningAmountDetail {
+  id                          String                    @id @default(uuid())
+  cash                        BurningCashAmountDetail?
+  coin                        BurningCoinAmountDetail[]
+  totalAmount                 Float
+  createdAt                   DateTime                  @default(now())
+  updatedAt                   DateTime                  @updatedAt
+  customerOrganizationOrder   CustomerOrganizationOrder @relation(fields: [customerOrganizationOrderId], references: [id])
+  customerOrganizationOrderId String                    @unique
+
+  @@map("customerBurningAmountDetail")
+}
+
+model BurningCashAmountDetail {
+  id                            String                      @id @default(uuid())
+  amount                        Float
+  createdAt                     DateTime                    @default(now())
+  updatedAt                     DateTime                    @updatedAt
+  customerBurningAmountDetail   CustomerBurningAmountDetail @relation(fields: [customerBurningAmountDetailId], references: [id])
+  customerBurningAmountDetailId String                      @unique
+
+  @@map("burningCashAmountDetail")
+}
+
+model EarningCoinAmountDetail {
+  id                            String                      @id @default(uuid())
+  currencyCode                  String
+  amount                        Float
+  createdAt                     DateTime                    @default(now())
+  updatedAt                     DateTime                    @updatedAt
+  customerEarningAmountDetail   CustomerEarningAmountDetail @relation(fields: [customerEarningAmountDetailId], references: [id])
+  customerEarningAmountDetailId String
+  earningExpiresIn              Int
+  organizationCampaignId        String?
+  organizationCampaign          OrganizationCampaign?       @relation(fields: [organizationCampaignId], references: [id])
+
+  @@map("earningCoinAmountDetail")
+}
+
+model BurningCoinAmountDetail {
+  id                            String                      @id @default(uuid())
+  currencyCode                  String
+  amount                        Int
+  createdAt                     DateTime                    @default(now())
+  updatedAt                     DateTime                    @updatedAt
+  customerBurningAmountDetail   CustomerBurningAmountDetail @relation(fields: [customerBurningAmountDetailId], references: [id])
+  customerBurningAmountDetailId String                      @unique
+
+  @@map("burningCoinAmountDetail")
+}
+
+model CustomerOrganizationOrderStatusHistory {
+  id                          String                          @id @default(uuid())
+  status                      CustomerOrganizationOrderStatus
+  timestamp                   DateTime
+  createdAt                   DateTime                        @default(now())
+  updatedAt                   DateTime                        @updatedAt
+  customerOrganizationOrder   CustomerOrganizationOrder       @relation(fields: [customerOrganizationOrderId], references: [id])
+  customerOrganizationOrderId String
+
+  @@map("customerOrganizationOrderStatusHistory")
+}
+
+model Invite {
+  id          String            @id @default(uuid())
+  isUsed      Boolean           @default(false)
+  assignedTo  String            @unique
+  location    String
+  generatedBy String
+  orgAdminId  String?
+  role        OrganizationRoles @default(SHOP)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@map("invite")
+}
+
+model Interest {
+  id          String   @id @default(uuid())
+  phoneNumber String   @unique
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("interest")
+}
+
+// --------------------------------------------------------
+// Types -----------------------------
+// --------------------------------------------------------
+
+// --------------------------------------------------------
+// Enums -----------------------------
+// --------------------------------------------------------
+
+enum PointTypes {
+  AVAILABLE
+  BLOCKED
+  PENDING
+}
+
+enum CustomerOrganizationOrderStatus {
+  INITIATED
+  COMPLETED
+  FAILED
+  CANCELLED
+  REFUNDED
+  HOLD
+}
+
+enum AccountType {
+  CHECKING
+  SAVINGS
+}
+
+enum OrganizationOrderType {
+  CURRENCY_PURCHASE
+  // Future order types can be added here
+}
+
+enum PayoutMethod {
+  BANK_TRANSFER
+  PAYPAL
+  CRYPTO_WALLET
+  DEBIT_CARD
+}
+
+enum PayoutFrequency {
+  DAILY
+  WEEKLY
+  BIWEEKLY
+  MONTHLY
+}
+
+enum NotificationPreference {
+  EMAIL
+  SMS
+  PUSH_NOTIFICATION
+}
+
+enum TemplateType {
+  TRANSACTIONAL
+  PROMOTIONAL
+}
+
+enum TemplateSubtype {
+  CUSTOMER_LOGIN_OTP
+  ORGANIZATION_LOGIN_OTP
+}
+
+enum OrganizationOrderStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+  REFUNDED
+  DISPUTED
+  HOLD
+}
+
+enum PaymentGateways {
+  PHONEPE
+  GPAY
+  PAYTM
+  STRIPE
+  PAYPAL
+}
+
+enum CustomerWalletPocketTransactionStatus {
+  BLOCKED
+  UNBLOCKED
+  AWARDED
+  CREDITED
+  PENDING
+  EXPIRED
+  DEBITED
+  CANCELLED
+}
+
+enum OrganizationRoles {
+  ADMIN
+  SHOP
+}

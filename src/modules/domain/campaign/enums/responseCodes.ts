@@ -1,0 +1,16 @@
+export enum CampaignResponseCodes {
+  Campaign_Created = 'Campaign_Created',
+  Campaigns_Fetched = 'Campaigns_Fetched',
+  Campaign_Fetched = 'Campaign_Fetched',
+  Campaign_Updated = 'Campaign_Updated',
+  Campaign_Deleted = 'Campaign_Deleted',
+  Campaign_Creation_Failed_Prisma = 'Campaign_Creation_Failed_Prisma',
+  Campaign_Updation_Failed_Prisma = 'Campaign_Updation_Failed_Prisma',
+  Campaign_Not_Found = 'Campaign_Not_Found',
+  Campaign_Already_Active = 'Campaign_Already_Active',
+  Overlapping_Campaigns_Not_Allowed = 'Overlapping_Campaigns_Not_Allowed',
+  Potential_Earning_Calculated = 'Potential_Earning_Calculated',
+  Not_Enough_Currency_Wallet_Balance = 'Not_Enough_Currency_Wallet_Balance',
+  Campaign_Already_Deleted = 'Campaign_Already_Deleted',
+  Not_Authorised_To_Create_Campaign = 'Not_Authorised_To_Create_Campaign',
+}

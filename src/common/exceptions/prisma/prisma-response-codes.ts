@@ -1,0 +1,23 @@
+export enum PrismaResponseCodes {
+  Unique_Constraint_Violation = 'P2002',
+  Record_Not_Found = 'P2025',
+  Foreign_Key_Constraint_Failed = 'P2003',
+  Constraint_Failed = 'P2004',
+  Value_Too_Large = 'P2005',
+  Value_Too_Long_For_Column = 'P2006',
+  Validation_Failed = 'P2007',
+  Query_Parsing_Failed = 'P2008',
+  Invalid_Access = 'P2009',
+  Raw_Query_Failed = 'P2010',
+  Null_Constraint_Violation = 'P2011',
+  Missing_Required_Value = 'P2012',
+  Missing_Required_Argument = 'P2013',
+  Relation_Violation = 'P2014',
+  Related_Record_Not_Found = 'P2015',
+  Query_Interpretation_Error = 'P2016',
+  Records_Not_Connected = 'P2017',
+  Required_Connected_Records_Not_Found = 'P2018',
+  Input_Error = 'P2019',
+  Value_Out_Of_Range = 'P2020',
+  Unexpected_Error = 'P9999', // Custom code for unexpected errors
+}

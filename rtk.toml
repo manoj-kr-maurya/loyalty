@@ -1,0 +1,16 @@
+[filters]
+# Strip NestJS build/watch start headers
+nest_headers = "^\\[Nest\\]\\s+\\d+.*$"
+
+# Strip Prisma schema generation logs and visual checkmarks
+prisma_noise = "(?i)(environment variables loaded|prisma schema loaded|generated Prisma Client)"
+
+# Truncate Prettier formatting paths when running 'npm run format'
+prettier_paths = ".*\\.ts\\s+\\d+ms$"
+
+# Drop empty line padding frequently outputted by Node CLIs
+empty_padding = "^\\s*$"
+
+[truncation]
+# Limit massive log dumps (like docker compose up -d) to the last 20 lines
+max_lines = 20
