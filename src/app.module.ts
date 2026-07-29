@@ -8,7 +8,6 @@ import { AppController } from './app.controller';
 import { Environments, envEnums } from './config/enums';
 import { envSchema } from './config/env-schema';
 import { IncomingReqResLoggingInterceptor } from './interceptors/log/incoming-req-res-logger.interceptor';
-import { CampaignModule } from './modules/domain/campaign/campaign.module';
 import { CurrencyModule } from './modules/domain/currency/currency.module';
 import { CustomerModule } from './modules/domain/customer/customer.module';
 import { CustomerOrganizationOrderModule } from './modules/domain/customer-organization-order/customer-organization-order.module';
@@ -18,8 +17,9 @@ import { OrganizationOrderModule } from './modules/domain/organization-order/org
 import { HealthModule } from './modules/health/health.module';
 import { OutgoingHttpModule } from './modules/http/http.module';
 import { redisStore } from 'cache-manager-redis-yet';
-import { CustomerWalletsModule } from './modules/domain/customer-wallets/customer-wallets.module';
 import { AdminModule } from './modules/domain/admin/admin.module';
+import { PointsModule } from './modules/domain/points/points.module';
+import { PromoModule } from './modules/domain/promo/promo.module';
 import { PrometheusMiddleware } from './middlewares/prometheus.middleware';
 import { ListenerModule } from './modules/listener/listener.module';
 import { ShopModule } from './modules/domain/shop/shop.module';
@@ -74,9 +74,9 @@ import { ShopModule } from './modules/domain/shop/shop.module';
     OrganizationModule,
     CurrencyModule,
     OrganizationOrderModule,
-    CampaignModule,
+    PromoModule,
     CustomerOrganizationOrderModule,
-    CustomerWalletsModule,
+    PointsModule,
     ShopModule,
     AdminModule,
   ],
