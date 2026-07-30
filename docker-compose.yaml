@@ -5,6 +5,10 @@ services:
       dockerfile: Dockerfile
     env_file:
       - .env
+    command: npm run start:dev
+    volumes:
+      - .:/app
+      - /app/node_modules
     depends_on:
       postgres:
         condition: service_healthy
@@ -86,7 +90,9 @@ services:
     volumes:
       - 'mongodb_data:/data/db'
     networks:
-      - lsbbe_net
+      lsbbe_net:
+        aliases:
+          - mongodb    # <-- Add these two lines here under networks
     healthcheck:
       test:
         ['CMD-SHELL', 'mongosh --quiet --eval "db.runCommand({ping: 1}).ok"']

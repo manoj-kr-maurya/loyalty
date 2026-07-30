@@ -42,6 +42,7 @@ model Organization {
   organizationOrders OrganizationOrder[]
   campaigns          OrganizationCampaign[]
   customerOrgOrders  CustomerOrganizationOrder[]
+  rewardPrograms     RewardProgram[]
 
   @@index([phoneNumber])
   @@index([countryCode])
@@ -74,6 +75,8 @@ model Customer {
   logoUrl           String?
   customerOrgOrders CustomerOrganizationOrder[]
   customerWallet    CustomerWallet[]
+  rewardBlocks      RewardBlock[]
+  rewardLedgers     RewardLedger[]
 
   @@map("customer")
 }
@@ -257,6 +260,169 @@ model CustomerWalletPocketTransaction {
 
   @@index([customerWalletPocketId])
   @@map("customerWalletPocketTransaction")
+}
+
+model RewardProgram {
+  id                 String            @id @default(uuid())
+  organization       Organization      @relation(fields: [organizationId], references: [id])
+  organizationId     String
+  name               String
+  description        String?
+  programType        RewardProgramType
+  rewardType         RewardType
+  status             RewardProgramStatus @default(ACTIVE)
+  rewardCurrency     String
+  budgetEnabled      Boolean           @default(false)
+  expiryNotification Boolean           @default(false)
+  priority           Int               @default(0)
+  business           String?
+  category           String?
+  startDate          DateTime          @default(now())
+  endDate            DateTime          @default(now())
+  timezone           String?           @default("UTC")
+  blackoutDates      Json?
+  workingDays        Json?
+  dailyTimeSlots     Json?
+  version            Int               @default(1)
+  isArchived         Boolean           @default(false)
+  rules              RewardProgramRule[]
+  rewardBlocks       RewardBlock[]
+  rewardLedgers      RewardLedger[]
+  budgets            Budget[]
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  @@map("rewardProgram")
+}
+
+model RewardProgramRule {
+  id              String           @id @default(uuid())
+  program         RewardProgram    @relation(fields: [programId], references: [id])
+  programId       String
+  name            String
+  conditions      Json
+  rewardType      RewardType
+  rewardMode      RewardMode
+  value           Decimal
+  ratioBase       Decimal?
+  threshold       Decimal?
+  meta            Json?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@map("rewardProgramRule")
+}
+
+model RewardBlock {
+  id            String           @id @default(uuid())
+  blockId       String           @unique
+  program       RewardProgram    @relation(fields: [programId], references: [id])
+  programId     String
+  customer      Customer         @relation(fields: [customerId], references: [id])
+  customerId    String
+  awardDetails  Json
+  status        RewardBlockStatus @default(PENDING)
+  expiresAt     DateTime?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  @@map("rewardBlock")
+}
+
+model RewardLedger {
+  id              String             @id @default(uuid())
+  customer        Customer           @relation(fields: [customerId], references: [id])
+  customerId      String
+  program         RewardProgram      @relation(fields: [programId], references: [id])
+  programId       String
+  rewardType      RewardType
+  amount          Decimal
+  details         Json?
+  transactionRef  String?
+  status          RewardLedgerStatus @default(CREDITED)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  @@map("rewardLedger")
+}
+
+model Budget {
+  id            String   @id @default(uuid())
+  program       RewardProgram @relation(fields: [programId], references: [id])
+  programId     String
+  totalBudget   Decimal  @default(0)
+  usedBudget    Decimal  @default(0)
+  reservedBudget Decimal @default(0)
+  currency      String   @default("INR")
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([programId])
+  @@map("budget")
+}
+
+model AuditLog {
+  id            String   @id @default(uuid())
+  entityType    String
+  entityId      String?
+  action        String
+  actor         String?
+  details       Json?
+  ipAddress     String?
+  userAgent     String?
+  createdAt     DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("auditLog")
+}
+
+enum RewardProgramType {
+  PROMO
+  LOYALTY
+}
+
+enum RewardType {
+  COUPON
+  DISCOUNT
+  CASHBACK
+  GIFT
+  POINTS
+  TIER_UPGRADE
+  BADGE
+  COINS
+  CASHBACK_WALLET
+}
+
+enum RewardMode {
+  RATIO
+  ABSOLUTE
+  PERCENTAGE
+  MULTIPLIER
+  SLAB
+  MILESTONE
+}
+
+enum RewardProgramStatus {
+  ACTIVE
+  PAUSED
+  ARCHIVED
+}
+
+enum RewardBlockStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  EXPIRED
+}
+
+enum RewardLedgerStatus {
+  CREDITED
+  DEBITED
+  REVERSED
+  EXPIRED
 }
 
 model CustomerOrganizationOrder {
