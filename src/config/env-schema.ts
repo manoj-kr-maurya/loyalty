@@ -3,7 +3,7 @@ import { Environments, envEnums } from './enums';
 import { EnvironmentVariables } from './types';
 
 type ValidationRule<T> = {
-  type: 'string' | 'number';
+  type: 'string' | 'number' | 'boolean';
   required: boolean;
   defaultValue: T | null;
   enumValues?: T[];
@@ -29,6 +29,16 @@ class CustomJOI {
     this.currentKey = key;
     this.validationRules[key] = {
       type: 'number',
+      required: false,
+      defaultValue: null,
+    };
+    return this;
+  }
+
+  boolean(key: keyof EnvironmentVariables) {
+    this.currentKey = key;
+    this.validationRules[key] = {
+      type: 'boolean',
       required: false,
       defaultValue: null,
     };
@@ -72,6 +82,15 @@ class CustomJOI {
         }
         if (typeof value !== 'number' || isNaN(value)) {
           return { error: new Error(`${key} must be a number`), value: null };
+        }
+      }
+
+      if (rule.type === 'boolean') {
+        if (typeof value === 'string') {
+          value = (value === 'true' || value === '1') as any;
+        }
+        if (typeof value !== 'boolean') {
+          return { error: new Error(`${key} must be a boolean`), value: null };
         }
       }
 
@@ -128,6 +147,12 @@ validator.string(envEnums.REDIS_HOST).default('localhost');
 
 // Define the REDIS_PORT as a required number
 validator.number(envEnums.REDIS_PORT).default(6379).required();
+
+// Define whether the Redis connection requires TLS (e.g. Upstash)
+validator
+  .boolean(envEnums.REDIS_TLS)
+  .default(false)
+  .required();
 
 // Define the SENDER_MAIL as a required string
 validator.string(envEnums.SENDER_MAIL).required();

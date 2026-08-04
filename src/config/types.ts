@@ -18,6 +18,7 @@ export interface RedisVariables {
   [envEnums.REDIS_PASSWORD]: string;
   [envEnums.REDIS_HOST]: string;
   [envEnums.REDIS_PORT]: number;
+  [envEnums.REDIS_TLS]: boolean;
 }
 
 export interface MailerVariables {

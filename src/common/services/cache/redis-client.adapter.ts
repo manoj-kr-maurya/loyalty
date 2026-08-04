@@ -1,6 +1,5 @@
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { Cache } from 'cache-manager';
+import { REDIS_CLIENT } from './redis-client.constants';
 
 /**
  * Adapter class for direct Redis client operations
@@ -11,19 +10,14 @@ export class RedisClientAdapter {
   private readonly logger = new Logger(RedisClientAdapter.name);
   private readonly redisClient: any;
 
-  constructor(@Inject(CACHE_MANAGER) private cacheManager: Cache) {
-    // Access the underlying Redis client
-    this.redisClient = (cacheManager as any).store.client;
+  constructor(@Inject(REDIS_CLIENT) private readonly client: any) {
+    // Access the shared, lifecycle-managed Redis client (see RedisModule)
+    this.redisClient = client;
 
     if (!this.redisClient) {
       this.logger.warn(
         'Redis client not available, some operations will not work',
       );
-    } else {
-      // Gracefully handle Redis connection errors so they don't crash the app
-      this.redisClient.on('error', (err: Error) => {
-        this.logger.error(`Redis client error: ${err.message}`);
-      });
     }
   }
 

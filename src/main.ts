@@ -13,6 +13,7 @@ async function bootstrap() {
     bufferLogs: true,
     snapshot: true,
   });
+  app.enableShutdownHooks();
   app.use(bodyParser.json({ limit: '10mb' }));
   app.use(bodyParser.urlencoded({ limit: '10mb', extended: true }));
 

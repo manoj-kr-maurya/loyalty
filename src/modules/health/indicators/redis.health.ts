@@ -4,19 +4,29 @@ import {
   HealthIndicatorResult,
   HealthCheckError,
 } from '@nestjs/terminus';
+import { RedisClientProvider } from 'src/common/services/cache/redis-client.provider';
 import { RedisService } from 'src/common/services/cache/redis.service';
 
 @Injectable()
 export class RedisHealthIndicator extends HealthIndicator {
   private readonly logger = new Logger(RedisHealthIndicator.name);
 
-  constructor(private readonly redisService: RedisService) {
+  constructor(
+    private readonly redisService: RedisService,
+    private readonly redisClientProvider: RedisClientProvider,
+  ) {
     super();
   }
 
   async isHealthy(key: string): Promise<HealthIndicatorResult> {
     try {
-      // Test Redis connection by setting and retrieving a test value
+      // Fast check: is the client socket ready? Avoids false failures during
+      // an in-progress reconnect even when Redis is about to come back.
+      if (!this.redisClientProvider.isReady()) {
+        throw new Error('Redis client is not ready (reconnecting/disconnected)');
+      }
+
+      // End-to-end check: set + retrieve a test value through cache-manager.
       const testKey = 'health:test';
       const testValue = Date.now().toString();
 
@@ -27,7 +37,7 @@ export class RedisHealthIndicator extends HealthIndicator {
         throw new Error('Redis value mismatch: Redis is not working correctly');
       }
 
-      return this.getStatus(key, true);
+      return this.getStatus(key, true, { ready: true });
     } catch (error) {
       this.logger.error(
         `Redis health check failed: ${error.message}`,

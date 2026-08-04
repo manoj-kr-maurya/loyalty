@@ -2,6 +2,7 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Cache } from 'cache-manager';
 import { ConfigService } from '@nestjs/config';
+import { REDIS_CLIENT } from './redis-client.constants';
 
 @Injectable()
 export class RedisService {
@@ -10,10 +11,11 @@ export class RedisService {
 
   constructor(
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
+    @Inject(REDIS_CLIENT) private readonly client: any,
     private readonly configService: ConfigService,
   ) {
-    // Access the Redis client for pattern-based operations
-    this.redisClient = (cacheManager as any).store.client;
+    // Use the shared, lifecycle-managed Redis client for pattern operations
+    this.redisClient = client;
   }
 
   /**
