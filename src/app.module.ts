@@ -23,6 +23,11 @@ import { PromoModule } from './modules/domain/promo/promo.module';
 import { PrometheusMiddleware } from './middlewares/prometheus.middleware';
 import { ListenerModule } from './modules/listener/listener.module';
 import { ShopModule } from './modules/domain/shop/shop.module';
+import { FXEngineModule } from './modules/domain/productised-commercial-engines/fx-engine';
+import { LoyaltyEngineModule } from './modules/domain/productised-commercial-engines/loyalty-engine';
+import { PromoEngineModule } from './modules/domain/productised-commercial-engines/promo-engine';
+import { PLBEngineModule } from './modules/domain/productised-commercial-engines/plb-engine';
+import { ValueExchangeEngineModule } from './modules/domain/productised-commercial-engines/value-exchange-engine';
 
 @Module({
   imports: [
@@ -48,6 +53,21 @@ import { ShopModule } from './modules/domain/shop/shop.module';
           // If you need to set a global TTL, you can do it here:
           // ttl: 14 * 24 * 60 * 60 * 1000, // 14 days in milliseconds
         });
+
+        // Handle Redis connection errors gracefully — don't crash the app
+        const redisClient = (store as any).client;
+        if (redisClient) {
+          redisClient.on('error', (err: Error) => {
+            console.error('[Redis] Connection error (app will continue without cache):', err.message);
+          });
+          redisClient.on('connect', () => {
+            console.log('[Redis] Connected successfully');
+          });
+          redisClient.on('reconnecting', () => {
+            console.log('[Redis] Reconnecting...');
+          });
+        }
+
         return {
           store: () => store,
         };
@@ -79,6 +99,12 @@ import { ShopModule } from './modules/domain/shop/shop.module';
     PointsModule,
     ShopModule,
     AdminModule,
+    // ─── Productised Commercial Engines ─────────────────
+    FXEngineModule,
+    LoyaltyEngineModule,
+    PromoEngineModule,
+    PLBEngineModule,
+    ValueExchangeEngineModule,
   ],
   controllers: [AppController],
   providers: [

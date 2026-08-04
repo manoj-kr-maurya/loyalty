@@ -641,3 +641,280 @@ enum OrganizationRoles {
   ADMIN
   SHOP
 }
+
+// --------------------------------------------------------
+// Productised Commercial Engines — New Models
+// --------------------------------------------------------
+
+// ─── FX / Currency Engine ───────────────────────────────
+
+model ExchangeRateHistory {
+  id                   String   @id @default(uuid())
+  currencyId           String
+  physicalCurrencyCode String   @default("INR")
+  rate                 Decimal  @db.Decimal(10, 6)
+  source               String   @default("MANUAL") // MANUAL | API_PROVIDER | CENTRAL_BANK
+  lockedBy             String?  // userId who locked the rate
+  lockedUntil          DateTime?
+  isActive             Boolean  @default(true)
+  createdAt            DateTime @default(now())
+
+  @@index([currencyId, physicalCurrencyCode])
+  @@index([createdAt])
+  @@map("exchangeRateHistory")
+}
+
+model FxAuditLog {
+  id            String   @id @default(uuid())
+  referenceId   String   // unique FX reference ID
+  fromCurrency  String
+  toCurrency    String
+  fromAmount    Decimal  @db.Decimal(18, 6)
+  toAmount      Decimal  @db.Decimal(18, 6)
+  rate          Decimal  @db.Decimal(10, 6)
+  spread        Decimal  @db.Decimal(10, 6) @default(0)
+  source        String   @default("MANUAL")
+  tenantId      String?
+  lockedRate    Boolean  @default(false)
+  createdAt     DateTime @default(now())
+
+  @@index([referenceId])
+  @@index([tenantId])
+  @@index([createdAt])
+  @@map("fxAuditRecord")
+}
+
+// ─── Loyalty Engine ─────────────────────────────────────
+
+model LoyaltyTier {
+  id              String         @id @default(uuid())
+  organizationId  String
+  name            String         // e.g., Silver, Gold, Platinum
+  level           Int            // 1, 2, 3...
+  minPoints       Int            @default(0) // threshold to reach this tier
+  maxPoints       Int?           // ceiling (null = no ceiling)
+  multiplier      Decimal        @default(1.0) @db.Decimal(5, 2) // earn multiplier
+  benefits        Json?          // tier-specific benefits
+  color           String?        // UI color
+  iconUrl         String?
+  isActive        Boolean        @default(true)
+  customerTiers   CustomerTier[]
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+  @@map("loyaltyTier")
+}
+
+model CustomerTier {
+  id              String      @id @default(uuid())
+  customerId      String
+  organizationId  String
+  tierId          String
+  tier            LoyaltyTier @relation(fields: [tierId], references: [id])
+  currentPoints   Int         @default(0)
+  lifetimePoints  Int         @default(0)
+  upgradedAt      DateTime?
+  downgradedAt    DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@unique([customerId, organizationId])
+  @@index([customerId])
+  @@index([organizationId])
+  @@map("customerTier")
+}
+
+model LoyaltyStatement {
+  id              String   @id @default(uuid())
+  customerId      String
+  organizationId  String
+  periodStart     DateTime
+  periodEnd       DateTime
+  openingBalance  Int      @default(0)
+  earnedPoints    Int      @default(0)
+  redeemedPoints  Int      @default(0)
+  expiredPoints   Int      @default(0)
+  closingBalance  Int      @default(0)
+  tierAtStart     String?
+  tierAtEnd       String?
+  generatedAt     DateTime @default(now())
+
+  @@index([customerId, organizationId])
+  @@index([periodEnd])
+  @@map("loyaltyStatement")
+}
+
+// ─── Promo / Discount Engine ────────────────────────────
+
+model PromoCode {
+  id              String   @id @default(uuid())
+  organizationId  String
+  code            String   @unique
+  name            String?
+  description     String?
+  discountType    String   // PERCENTAGE | ABSOLUTE | FREE_SHIPPING | BOGO
+  discountValue   Decimal  @db.Decimal(10, 2)
+  minOrderAmount  Decimal? @db.Decimal(10, 2)
+  maxDiscount     Decimal? @db.Decimal(10, 2)
+  usageLimit      Int?     // total uses allowed
+  perUserLimit    Int?     @default(1)
+  usedCount       Int      @default(0)
+  startDate       DateTime
+  endDate         DateTime
+  isActive        Boolean  @default(true)
+  isStackable     Boolean  @default(false)
+  applicableProducts Json? // product/category filters
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  redemptions     PromoRedemption[]
+
+  @@index([organizationId])
+  @@index([code])
+  @@map("promoCode")
+}
+
+model PromoRedemption {
+  id              String   @id @default(uuid())
+  promoCodeId     String
+  promoCode       PromoCode @relation(fields: [promoCodeId], references: [id])
+  customerId      String
+  organizationId  String
+  orderRef        String?
+  discountAmount  Decimal  @db.Decimal(10, 2)
+  orderAmount     Decimal  @db.Decimal(10, 2)
+  redeemedAt      DateTime @default(now())
+
+  @@index([promoCodeId])
+  @@index([customerId])
+  @@index([organizationId])
+  @@map("promoRedemption")
+}
+
+// ─── PLB Engine ─────────────────────────────────────────
+
+model PLBProgram {
+  id              String   @id @default(uuid())
+  organizationId  String
+  name            String
+  description     String?
+  cycleType       String   // MONTHLY | QUARTERLY | ANNUAL | CUSTOM
+  cycleStart      DateTime
+  cycleEnd        DateTime
+  metricDefinitions Json   // [{ name, type, target, weight }]
+  slabDefinitions   Json   // [{ min, max, incentiveType, incentiveValue }]
+  status          String   @default("DRAFT") // DRAFT | ACTIVE | CLOSED | ARCHIVED
+  approvalRequired Boolean @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([status])
+  @@map("plbProgram")
+}
+
+model PLBMetric {
+  id              String   @id @default(uuid())
+  programId       String
+  entityId        String   // customer/partner/agent
+  entityType      String   @default("CUSTOMER")
+  metricName      String
+  metricValue     Decimal  @db.Decimal(18, 6)
+  targetValue     Decimal  @db.Decimal(18, 6)
+  achievementPct  Decimal  @db.Decimal(5, 2)
+  periodStart     DateTime
+  periodEnd       DateTime
+  recordedAt      DateTime @default(now())
+
+  @@index([programId, entityId])
+  @@index([periodEnd])
+  @@map("plbMetric")
+}
+
+model PLBBonus {
+  id              String   @id @default(uuid())
+  programId       String
+  entityId        String
+  cycleStart      DateTime
+  cycleEnd        DateTime
+  slabName        String?
+  incentiveType   String   // CASH | POINTS | CREDIT | VOUCHER
+  incentiveValue  Decimal  @db.Decimal(18, 6)
+  currency        String   @default("INR")
+  status          String   @default("PENDING") // PENDING | APPROVED | PAID | REJECTED
+  approvedBy      String?
+  approvedAt      DateTime?
+  payoutRef       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([programId, entityId])
+  @@index([status])
+  @@map("plbBonus")
+}
+
+// ─── Value Exchange Engine ──────────────────────────────
+
+model ExchangeAgreement {
+  id              String   @id @default(uuid())
+  name            String
+  sourceEntityId  String   // source organization/partner
+  targetEntityId  String   // target organization/partner
+  sourceCurrency  String   // source loyalty currency code
+  targetCurrency  String   // target loyalty currency code
+  conversionRatio Decimal  @db.Decimal(10, 6) // 1 source = X target
+  minAmount       Int?     // minimum exchange amount
+  maxAmount       Int?     // maximum per transaction
+  dailyCap        Int?     // daily limit
+  monthlyCap      Int?     // monthly limit
+  isActive        Boolean  @default(true)
+  trustModel      String   @default("BILATERAL") // BILATERAL | PLATFORM_MEDIATED | CONSORTIUM
+  settlementModel String   @default("REAL_TIME") // REAL_TIME | DEFERRED
+  breakageOwner   String   @default("ISSUER") // ISSUER | PLATFORM | SHARED
+  version         Int      @default(1)
+  effectiveFrom   DateTime @default(now())
+  effectiveUntil  DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([sourceEntityId, targetEntityId, sourceCurrency, targetCurrency])
+  @@index([sourceEntityId])
+  @@index([targetEntityId])
+  @@map("exchangeAgreement")
+}
+
+model ExchangeOrder {
+  id              String   @id @default(uuid())
+  agreementId     String
+  sourceEntityId  String
+  targetEntityId  String
+  sourceCustomerId String
+  targetCustomerId String?
+  sourceAmount    Int
+  targetAmount    Int
+  conversionRate  Decimal  @db.Decimal(10, 6)
+  status          String   @default("PENDING") // PENDING | PROCESSING | COMPLETED | REVERSED | FAILED
+  reversalReason  String?
+  reversedAt      DateTime?
+  referenceId     String   @unique
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([agreementId])
+  @@index([sourceCustomerId])
+  @@index([targetCustomerId])
+  @@index([status])
+  @@map("exchangeOrder")
+}
+
+model ExchangeAuditLog {
+  id              String   @id @default(uuid())
+  exchangeOrderId String
+  action          String   // QUOTED | EXECUTED | REVERSED | FAILED
+  details         Json?
+  createdAt       DateTime @default(now())
+
+  @@index([exchangeOrderId])
+  @@map("exchangeAuditLog")
+}

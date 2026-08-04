@@ -22,5 +22,7 @@ COPY . .
 # Generate Prisma client
 RUN npm run db
 
-# Use wait-for-it script to wait for PostgreSQL before running migrations
-CMD ["/bin/sh", "-c", "/usr/local/bin/wait-for-it.sh postgres:5432 -t 60 -- npm run migrate-deploy && npm run build && npm start"]
+# Use wait-for-it script to wait for dependencies before starting
+# Note: PostgreSQL is hosted on Supabase (cloud), so we don't wait for a local postgres container.
+# If you have other services to wait for (e.g., Redis), add them here.
+CMD ["/bin/sh", "-c", "npm run migrate-deploy && npm run build && npm start"]

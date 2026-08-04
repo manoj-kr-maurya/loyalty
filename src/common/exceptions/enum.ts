@@ -6,4 +6,5 @@ export enum CommonResponseCodes {
   Invalid_Session = 'Invalid_Session',
   Sms_Template_Not_Found = 'Sms_Template_Not_Found',
   Too_Many_Attempts = 'Too_Many_Attempts',
+  Generic_Error = 'Generic_Error',
 }
