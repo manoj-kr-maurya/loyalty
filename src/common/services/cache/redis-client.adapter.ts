@@ -19,6 +19,11 @@ export class RedisClientAdapter {
       this.logger.warn(
         'Redis client not available, some operations will not work',
       );
+    } else {
+      // Gracefully handle Redis connection errors so they don't crash the app
+      this.redisClient.on('error', (err: Error) => {
+        this.logger.error(`Redis client error: ${err.message}`);
+      });
     }
   }
 

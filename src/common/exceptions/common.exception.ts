@@ -1,8 +1,16 @@
 import {
   UnauthorizedException,
   UnprocessableEntityException,
+  HttpException,
+  HttpStatus,
 } from '@nestjs/common';
 import { CommonResponseCodes } from './enum';
+
+export class CommonException extends HttpException {
+  constructor(message: string, status: HttpStatus = HttpStatus.BAD_REQUEST) {
+    super({ error: message, errorCode: CommonResponseCodes.Generic_Error }, status);
+  }
+}
 
 export class InvalidJWTException extends UnauthorizedException {
   constructor() {
