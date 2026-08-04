@@ -5,7 +5,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { WinstonModule } from 'nest-winston';
 import { AppController } from './app.controller';
-import { Environments, envEnums } from './config/enums';
+import { envEnums } from './config/enums';
 import { envSchema } from './config/env-schema';
 import { IncomingReqResLoggingInterceptor } from './interceptors/log/incoming-req-res-logger.interceptor';
 import { CurrencyModule } from './modules/domain/currency/currency.module';
@@ -16,7 +16,9 @@ import { OrganizationModule } from './modules/domain/organization/organization.m
 import { OrganizationOrderModule } from './modules/domain/organization-order/organization-order.module';
 import { HealthModule } from './modules/health/health.module';
 import { OutgoingHttpModule } from './modules/http/http.module';
-import { redisStore } from 'cache-manager-redis-yet';
+import { redisInsStore } from 'cache-manager-redis-yet';
+import { REDIS_CLIENT } from './common/services/cache/redis-client.constants';
+import { RedisModule } from './common/services/cache/redis.module';
 import { AdminModule } from './modules/domain/admin/admin.module';
 import { PointsModule } from './modules/domain/points/points.module';
 import { PromoModule } from './modules/domain/promo/promo.module';
@@ -36,43 +38,19 @@ import { ValueExchangeEngineModule } from './modules/domain/productised-commerci
       isGlobal: true,
       validationSchema: envSchema,
     }),
+    RedisModule,
     CacheModule.registerAsync({
       isGlobal: true,
-      useFactory: async (configService: ConfigService) => {
-        const store = await redisStore({
-          socket: {
-            host: configService.get<string>(envEnums.REDIS_HOST),
-            port: configService.get<number>(envEnums.REDIS_PORT),
-          },
-          username: 'default',
-          password:
-            configService.get<string>(envEnums.ENVIRONMENT) !==
-            Environments.local
-              ? configService.get<string>(envEnums.REDIS_PASSWORD)
-              : undefined,
-          // If you need to set a global TTL, you can do it here:
-          // ttl: 14 * 24 * 60 * 60 * 1000, // 14 days in milliseconds
-        });
+      useFactory: async (configService: ConfigService, redisClient: any) => {
+        // Wrap the shared, lifecycle-managed Redis client (see RedisModule /
+        // RedisClientProvider) into a cache-manager store. The store must be
+        // returned as an object directly — `{ store: () => store }` breaks
+        // cache-manager v5 (store.set/get/client become undefined).
+        const store = redisInsStore(redisClient);
 
-        // Handle Redis connection errors gracefully — don't crash the app
-        const redisClient = (store as any).client;
-        if (redisClient) {
-          redisClient.on('error', (err: Error) => {
-            console.error('[Redis] Connection error (app will continue without cache):', err.message);
-          });
-          redisClient.on('connect', () => {
-            console.log('[Redis] Connected successfully');
-          });
-          redisClient.on('reconnecting', () => {
-            console.log('[Redis] Reconnecting...');
-          });
-        }
-
-        return {
-          store: () => store,
-        };
+        return { store };
       },
-      inject: [ConfigService],
+      inject: [ConfigService, REDIS_CLIENT],
     }),
     MailerModule.forRootAsync({
       imports: [ConfigModule],
