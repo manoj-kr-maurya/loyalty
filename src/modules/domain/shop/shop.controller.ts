@@ -4,34 +4,31 @@ import {
   Get,
   Param,
   Post,
-  Req,
-  UseInterceptors,
+  Query,
+  UseGuards,
+  UsePipes,
 } from '@nestjs/common';
-import { ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
-
+import { ApiBody, ApiOperation, ApiResponse, ApiSecurity, ApiTags, ApiQuery } from '@nestjs/swagger';
 import { CallStatuses } from 'src/common/enums/status-codes';
-import { VerifyJWTAndFetchPayload } from 'src/interceptors/auth/verify-jwt-and-fetch-payload';
-import { RequestWithJWTTokenPayloadAndToken } from '../auth/DTO/jwt.dto';
-import { UpdateOrganizationForm } from '../organization/DTO/organizations.dto';
-import { UpdateShopForm } from './DTO/shop.dto';
+import { ApiKeyGuard } from 'src/common/guards/api-key.guard';
+import { JoiValidationPipe } from 'src/common/pipes/joi-validation.pipe';
+import { UpdateShopForm, UpdateShopSchema } from './DTO/shop.dto';
 import { ShopResponseCodes } from './enums/responseCodes';
 import { ShopService } from './shop.service';
 
 @ApiTags('Shops of an Organization')
+@ApiSecurity('x-api-key')
+@UseGuards(ApiKeyGuard)
 @Controller('shop')
 export class ShopController {
   constructor(private readonly shopService: ShopService) {}
 
   @Get('/fetch-active-shops-by-org-id')
-  @UseInterceptors(VerifyJWTAndFetchPayload)
+  @ApiQuery({ name: 'organizationId', required: true })
   async fetchActiveShopsOfAnOrg(
-    @Req() request: RequestWithJWTTokenPayloadAndToken,
+    @Query('organizationId') organizationId: string,
   ) {
-    const organizationAdminId = request.tokenPayload.sub;
-
-    const shops = await this.shopService.fetchActiveShopsOfAnOrg(
-      organizationAdminId,
-    );
+    const shops = await this.shopService.fetchActiveShopsOfAnOrg(organizationId);
     return {
       code: ShopResponseCodes.Fetched_Active_Shops,
       status: CallStatuses.Success,
@@ -40,19 +37,13 @@ export class ShopController {
   }
 
   @Post('/update')
-  @UseInterceptors(VerifyJWTAndFetchPayload)
-  @ApiOperation({ summary: 'Update organization details' })
-  @ApiBody({ type: UpdateOrganizationForm })
-  @ApiResponse({
-    status: 200,
-    description: 'Organization updated successfully.',
-  })
-  async updateOrganization(
-    @Req() request: RequestWithJWTTokenPayloadAndToken,
-    @Body() form: UpdateShopForm,
-  ) {
-    const organizationAdminId = request.tokenPayload.sub;
-    const shop = await this.shopService.updateShop(organizationAdminId, form);
+  @UsePipes(new JoiValidationPipe(UpdateShopSchema))
+  @ApiOperation({ summary: 'Update shop details' })
+  @ApiBody({ type: UpdateShopForm })
+  @ApiResponse({ status: 200, description: 'Shop updated successfully.' })
+  async updateShop(@Body() form: UpdateShopForm & { organizationId: string }) {
+    const { organizationId, ...data } = form;
+    const shop = await this.shopService.updateShop(organizationId, data as any);
     return {
       status: CallStatuses.Success,
       code: ShopResponseCodes.Shop_Updated,

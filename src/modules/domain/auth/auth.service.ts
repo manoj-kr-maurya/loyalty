@@ -102,10 +102,9 @@ export class AuthService {
     // Implement OTP rate-limiting: max 5 OTPs in a 15-minute window
     const otpLimitKey = `${referenceId}-otp-limit`;
     const otpRequests = (await this.cacheService.get<number>(otpLimitKey)) || 0;
-    // TODO - Uncomment below block in production
-    // if (otpRequests >= 5) {
-    //   throw new TooManyAttemptsException();
-    // }
+    if (otpRequests >= 5) {
+      throw new TooManyAttemptsException();
+    }
 
     // Increment OTP request count and set TTL (15 minutes)
     await this.cacheService.set(otpLimitKey, otpRequests + 1, 15 * 60 * 1000);
@@ -154,7 +153,7 @@ export class AuthService {
     const latestOtpForThisReferenceId = await this.cacheService.get(
       referenceId,
     );
-
+    
     // Check if the provided OTP matches the cached OTP
     if (latestOtpForThisReferenceId === otp) {
       // OTP is valid, clear it from the cache

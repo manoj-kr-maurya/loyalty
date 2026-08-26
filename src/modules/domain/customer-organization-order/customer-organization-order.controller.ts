@@ -5,26 +5,23 @@ import {
   Param,
   Post,
   Query,
-  Req,
-  UseInterceptors,
+  UseGuards,
+  UsePipes,
 } from '@nestjs/common';
-import { ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBody, ApiOperation, ApiResponse, ApiSecurity, ApiTags } from '@nestjs/swagger';
 import { CallStatuses } from 'src/common/enums/status-codes';
 import { CustomerOrganizationOrderService } from './customer-organization-order.service';
 import {
-  CreateCustomerOrganizationOrderDto,
-  FetchCustomerOrdersForCustomerQueryParams,
-  FetchCustomerOrdersForOrganizationQueryParams,
-  UpdateCustomerOrganizationOrderDto,
+  CreateOrderSchema,
+  UpdateOrderStatusSchema,
 } from './DTO/customerOrganizationOrder.dto';
 import { customerOrganizationOrderResponseCodes } from './enums/responseCodes';
-import {
-  RequestWithJWTTokenPayloadAndToken,
-  JwtTokenPayload,
-} from '../auth/DTO/jwt.dto';
-import { VerifyJWTAndFetchPayload } from 'src/interceptors/auth/verify-jwt-and-fetch-payload';
+import { ApiKeyGuard } from 'src/common/guards/api-key.guard';
+import { JoiValidationPipe } from 'src/common/pipes/joi-validation.pipe';
 
 @ApiTags('Customer-Organization-Orders')
+@ApiSecurity('x-api-key')
+@UseGuards(ApiKeyGuard)
 @Controller('customer-organization/order')
 export class CustomerOrganizationOrderController {
   constructor(
@@ -33,25 +30,17 @@ export class CustomerOrganizationOrderController {
 
   @Post()
   @ApiOperation({ summary: 'Create an order for a customer to organization' })
-  @ApiResponse({
-    status: 201,
-    description: 'The order has been successfully created.',
-  })
-  @ApiBody({ type: CreateCustomerOrganizationOrderDto })
-  @UseInterceptors(VerifyJWTAndFetchPayload)
+  @ApiResponse({ status: 201, description: 'The order has been successfully created.' })
+  @UsePipes(new JoiValidationPipe(CreateOrderSchema))
   async createOrder(
-    @Body() createOrderDto: CreateCustomerOrganizationOrderDto,
-    @Req() request: RequestWithJWTTokenPayloadAndToken,
+    @Body() createOrderDto: { organizationId: string; burningAmountDetails: any; details?: any; idempotencyKey?: string },
   ) {
-    const jwtTokenPayload: JwtTokenPayload = request.tokenPayload;
-
-    // Wait for the promise to resolve after the delay and then continue
+    const { organizationId, ...data } = createOrderDto;
     const orgOrder =
       await this.customerOrganizationOrderService.createCustomerOrganizationOrder(
-        jwtTokenPayload.sub,
-        createOrderDto,
+        organizationId,
+        data as any,
       );
-
     return {
       status: CallStatuses.Success,
       code: customerOrganizationOrderResponseCodes.Order_Created,
@@ -61,24 +50,16 @@ export class CustomerOrganizationOrderController {
 
   @Get('customer')
   @ApiOperation({ summary: 'get orders for a customer to organization' })
-  @ApiResponse({
-    status: 200,
-    description: 'Orders have been successfully fetched',
-  })
-  @UseInterceptors(VerifyJWTAndFetchPayload)
+  @ApiResponse({ status: 200, description: 'Orders have been successfully fetched' })
   async getAllCustomerOrganizationOrders(
-    @Req() request: RequestWithJWTTokenPayloadAndToken,
-    @Query() query: FetchCustomerOrdersForCustomerQueryParams,
+    @Query('organizationId') organizationId: string,
+    @Query() query: any,
   ) {
-    const jwtTokenPayload: JwtTokenPayload = request.tokenPayload;
-
-    // Wait for the promise to resolve after the delay and then continue
     const { cusOrders, metadata } =
       await this.customerOrganizationOrderService.fetchOrganizationCustomerOrdersPerCustomer(
-        jwtTokenPayload.sub,
+        organizationId,
         query,
       );
-
     return {
       status: CallStatuses.Success,
       code: customerOrganizationOrderResponseCodes.Orders_Fetched,
@@ -88,16 +69,11 @@ export class CustomerOrganizationOrderController {
   }
 
   @Get('potential-order-info/:id')
-  @ApiOperation({ summary: 'get orders for a customer to organization' })
-  @ApiResponse({
-    status: 200,
-    description: 'Orders have been successfully fetched',
-  })
-  @UseInterceptors(VerifyJWTAndFetchPayload)
+  @ApiOperation({ summary: 'get potential order info' })
+  @ApiResponse({ status: 200, description: 'Order info successfully fetched' })
   async fetchPotentialOrderInfo(@Param('id') id: string) {
     const orgPotentialorder =
       await this.customerOrganizationOrderService.fetchPotentialOrder(id);
-
     return {
       status: CallStatuses.Success,
       code: customerOrganizationOrderResponseCodes.Potenion_Order_Fetched,
@@ -107,32 +83,22 @@ export class CustomerOrganizationOrderController {
 
   @Get('organization')
   @ApiOperation({ summary: 'Get orders for an organization with filters' })
-  @ApiResponse({
-    status: 200,
-    description: 'Orders have been successfully fetched',
-  })
-  @UseInterceptors(VerifyJWTAndFetchPayload)
+  @ApiResponse({ status: 200, description: 'Orders have been successfully fetched' })
   async getAllOrders(
-    @Req() request: RequestWithJWTTokenPayloadAndToken,
-    @Query() query: FetchCustomerOrdersForOrganizationQueryParams,
+    @Query('organizationId') organizationId: string,
+    @Query() query: any,
   ) {
-    const jwtTokenPayload: JwtTokenPayload = request.tokenPayload;
-
-    // Fetch orders with pagination and filters
     const { orders, metadata } =
       await this.customerOrganizationOrderService.fetchOrganizationCustomerOrders(
-        jwtTokenPayload.sub,
+        organizationId,
         query,
       );
-
-    // Add customer name to each order in the response
-    const ordersWithCustomerName = orders.map((order) => {
+    const ordersWithCustomerName = orders.map((order: any) => {
       return {
         ...order,
         customerName: order.customer?.name || 'Customer',
       };
     });
-
     return {
       status: CallStatuses.Success,
       code: customerOrganizationOrderResponseCodes.Orders_Fetched,
@@ -142,21 +108,17 @@ export class CustomerOrganizationOrderController {
   }
 
   @Post('update')
-  @ApiOperation({ summary: 'update order for a organization' })
-  @ApiResponse({
-    status: 201,
-    description: 'Orders have been successfully updated',
-  })
-  @UseInterceptors(VerifyJWTAndFetchPayload)
+  @ApiOperation({ summary: 'update order for an organization' })
+  @ApiResponse({ status: 201, description: 'Orders have been successfully updated' })
+  @UsePipes(new JoiValidationPipe(UpdateOrderStatusSchema))
   async updateOrder(
-    @Body() updateOrderDto: UpdateCustomerOrganizationOrderDto,
+    @Body() updateOrderDto: { status: string; orderId: string; organizationId?: string },
   ) {
-    // Wait for the promise to resolve after the delay and then continue
     const orgOrder =
       await this.customerOrganizationOrderService.handleUpdateCustomerOrganizationOrder(
-        updateOrderDto,
+        { status: updateOrderDto.status, orderId: updateOrderDto.orderId } as any,
+        { sub: updateOrderDto.organizationId } as any,
       );
-
     return {
       status: CallStatuses.Success,
       code: customerOrganizationOrderResponseCodes.Order_Updated,

@@ -1,97 +1,57 @@
-import { IsString, IsNotEmpty, IsOptional } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import * as Joi from 'joi';
 
 export class OtpPhoneFindOrCreateCustomerForm {
-  @ApiProperty({
-    description: `Customer's country code for phone number`,
-    example: '91',
-    type: String,
-  })
-  @IsString()
+  @ApiProperty({ description: `Country code`, example: '91', type: String })
   countryCode!: string;
 
-  @ApiProperty({
-    description: `Customer's phone number`,
-    example: '9898989898',
-    type: String,
-  })
-  @IsString()
+  @ApiProperty({ description: `Phone number`, example: '9898989898', type: String })
   phoneNumber!: string;
 
-  @ApiPropertyOptional({
-    description: `Customer's name`,
-    example: 'Y',
-    type: String,
-  })
-  @IsOptional()
-  @IsString()
+  @ApiPropertyOptional({ description: `Name`, example: 'Y', type: String })
   name?: string;
 }
 
 export class OtpValidateOtpBodyForm {
-  @ApiProperty({
-    description: `customer's id`,
-    example: '9cbr237fnyb283yfc983d',
-    type: String,
-  })
-  @IsString()
+  @ApiProperty({ description: `Customer ID`, type: String })
   id?: string;
-  @ApiProperty({
-    description: `customer's otp to continue`,
-    example: '1W3R56',
-    type: String,
-  })
-  @IsString()
+
+  @ApiProperty({ description: `OTP`, example: '123456', type: String })
   otp: string;
 }
 
 export class AddOrSubtractLoyaltyBodyForm {
-  @ApiProperty({
-    description: `Customer's Id`,
-    example: '769827nc892r37bc9480r7b',
-    type: String,
-  })
-  @IsString()
-  customerId: string;
-
-  @ApiProperty({
-    description: `Organization's Id`,
-    example: 'r7489rybd893749038ry3v89',
-    type: String,
-  })
-  @IsString()
-  organizationId: string;
-
-  @ApiProperty({
-    description: `loyalty to add`,
-    example: 69,
-    type: Number,
-  })
-  @IsString()
-  loyalty: number;
+  @ApiProperty({ type: String }) customerId: string;
+  @ApiProperty({ type: String }) organizationId: string;
+  @ApiProperty({ type: Number }) loyalty: number;
 }
 
 export class GetCustomerParams {
-  @IsNotEmpty()
   customerId: string;
 }
 
 export class UpdateCustomerForm {
-  @ApiPropertyOptional({
-    description: `Customer's name`,
-    example: 'X',
-    type: String,
-  })
-  @IsOptional()
-  @IsString()
-  name?: string;
-
-  @ApiPropertyOptional({
-    description: `Customer's logo in base 64`,
-    example: 'Xniwqjdnqwd',
-    type: String,
-  })
-  @IsOptional()
-  @IsString()
-  base64Logo?: string;
+  @ApiPropertyOptional({ type: String }) name?: string;
+  @ApiPropertyOptional({ type: String }) base64Logo?: string;
 }
+
+export const OtpPhoneFindOrCreateSchema = Joi.object({
+  countryCode: Joi.string().required(),
+  phoneNumber: Joi.string().required(),
+  name: Joi.string().optional(),
+});
+
+export const OtpValidateOtpSchema = Joi.object({
+  id: Joi.string().optional(),
+  otp: Joi.string().required(),
+});
+
+export const UpdateCustomerSchema = Joi.object({
+  customerId: Joi.string().optional(),
+  name: Joi.string().optional(),
+  base64Logo: Joi.string().optional(),
+}).unknown(true);
+
+export const LogoutCustomerSchema = Joi.object({
+  customerId: Joi.string().required(),
+});

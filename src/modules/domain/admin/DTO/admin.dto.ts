@@ -1,5 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsString, MaxLength } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import * as Joi from 'joi';
 
 export class InviteAdminForm {
   @ApiProperty({
@@ -7,7 +7,6 @@ export class InviteAdminForm {
     example: '9899096444',
     type: String,
   })
-  @IsString()
   phoneNumber!: string;
 
   @ApiProperty({
@@ -15,7 +14,10 @@ export class InviteAdminForm {
     example: 'Ambala, Haryana',
     type: String,
   })
-  @IsString()
-  @MaxLength(100)
   location!: string;
 }
+
+export const InviteAdminSchema = Joi.object({
+  phoneNumber: Joi.string().required(),
+  location: Joi.string().max(100).required(),
+});

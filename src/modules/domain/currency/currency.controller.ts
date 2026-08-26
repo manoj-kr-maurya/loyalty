@@ -4,42 +4,40 @@ import {
   Get,
   Param,
   Post,
-  Req,
-  UseInterceptors,
+  Query,
+  UseGuards,
+  UsePipes,
 } from '@nestjs/common';
 import { CurrencyService } from './currency.service';
 import {
-  AddBalanceToCurrencyBucketForm,
-  CreateCurrencyForm,
-  CreateOrgnizationCurrencyBucketForm,
-  FilterOrgCreatedCurrenciesForm,
-  GetOrgCurrenciesForm,
-  UpdateCurrencyBucketPropertiesForm,
+  CreateCurrencySchema,
+  CreateOrgCurrencyBucketSchema,
+  AddBalanceSchema,
+  UpdateBucketPropertiesSchema,
+  FilterOrgCurrenciesSchema,
 } from './DTO/currency.dto';
 import { CurrencyResponseCodes } from './enums/responseCodes';
 import { CallStatuses } from 'src/common/enums/status-codes';
-import { ApiTags } from '@nestjs/swagger';
-import {
-  RequestWithJWTTokenPayloadAndToken,
-  JwtTokenPayload,
-} from '../auth/DTO/jwt.dto';
-import { VerifyJWTAndFetchPayload } from 'src/interceptors/auth/verify-jwt-and-fetch-payload';
+import { ApiSecurity, ApiTags } from '@nestjs/swagger';
+import { ApiKeyGuard } from 'src/common/guards/api-key.guard';
+import { JoiValidationPipe } from 'src/common/pipes/joi-validation.pipe';
+
 @ApiTags('Currency')
+@ApiSecurity('x-api-key')
+@UseGuards(ApiKeyGuard)
 @Controller('currency')
 export class CurrencyController {
   constructor(private readonly currencyService: CurrencyService) {}
+
   @Post(`/create`)
-  @UseInterceptors(VerifyJWTAndFetchPayload)
+  @UsePipes(new JoiValidationPipe(CreateCurrencySchema))
   async createCurrency(
-    @Req() request: RequestWithJWTTokenPayloadAndToken,
-    @Body() form: CreateCurrencyForm,
+    @Body() form: { organizationId: string; currencyCode: string; name: string },
   ) {
-    const jwtTokenPayload: JwtTokenPayload = request.tokenPayload;
     const currency = await this.currencyService.createCurrency(
-      jwtTokenPayload.sub,
+      form.organizationId,
       form,
     );
-
     return {
       status: 'success',
       code: CurrencyResponseCodes.Created_Currency,
@@ -48,14 +46,12 @@ export class CurrencyController {
   }
 
   @Post(`/create-organization-currency-bucket`)
-  @UseInterceptors(VerifyJWTAndFetchPayload)
+  @UsePipes(new JoiValidationPipe(CreateOrgCurrencyBucketSchema))
   async createOrganizationCurrencyBucket(
-    @Req() request: RequestWithJWTTokenPayloadAndToken,
-    @Body() form: CreateOrgnizationCurrencyBucketForm,
+    @Body() form: { organizationId: string; currencyCode: string },
   ) {
-    const jwtTokenPayload: JwtTokenPayload = request.tokenPayload;
     await this.currencyService.createOrganizationCurrencyBucket(
-      jwtTokenPayload.sub,
+      form.organizationId,
       form,
     );
     return {
@@ -65,15 +61,11 @@ export class CurrencyController {
   }
 
   @Get(`/get-organization-currency-buckets`)
-  @UseInterceptors(VerifyJWTAndFetchPayload)
   async getOrganizationCurrencyBuckets(
-    @Req() request: RequestWithJWTTokenPayloadAndToken,
+    @Query('organizationId') organizationId: string,
   ) {
-    const jwtTokenPayload: JwtTokenPayload = request.tokenPayload;
     const currencyBuckets =
-      await this.currencyService.getOrganizationCurrencyBuckets(
-        jwtTokenPayload.sub,
-      );
+      await this.currencyService.getOrganizationCurrencyBuckets(organizationId);
     return {
       status: 'success',
       code: CurrencyResponseCodes.Currency_Buckets_Fetched,
@@ -82,15 +74,12 @@ export class CurrencyController {
   }
 
   @Post('/add-balance-to-organization-currency-bucket')
-  @UseInterceptors(VerifyJWTAndFetchPayload)
+  @UsePipes(new JoiValidationPipe(AddBalanceSchema))
   async addBalanceToOrganizationCurrencyBucket(
-    @Req() request: RequestWithJWTTokenPayloadAndToken,
-    @Body() form: AddBalanceToCurrencyBucketForm,
+    @Body() form: { organizationId: string; currencyCode: string; amount: number },
   ) {
-    const jwtTokenPayload: JwtTokenPayload = request.tokenPayload;
-
     await this.currencyService.addBalanceToOrganizationCurrencyBucket(
-      jwtTokenPayload.sub, // Assuming sub contains the organization ID
+      form.organizationId,
       form.currencyCode,
       form.amount,
     );
@@ -101,13 +90,13 @@ export class CurrencyController {
   }
 
   @Post('/update-organization-currency-bucket')
-  @UseInterceptors(VerifyJWTAndFetchPayload)
+  @UsePipes(new JoiValidationPipe(UpdateBucketPropertiesSchema))
   async enableAutoTopupForOrganizationCurrencyBucket(
-    @Body() form: UpdateCurrencyBucketPropertiesForm,
+    @Body() form: { id: string; autoTopUpEnabled: boolean; autoTopUpThreshold?: number; autoTopUpAmount?: number },
   ) {
     const currencyBucket =
       await this.currencyService.updateOrganizationCurrencyBucketProperties(
-        form,
+        form as any,
       );
     return {
       status: CallStatuses.Success,
@@ -117,15 +106,13 @@ export class CurrencyController {
   }
 
   @Get('/search/non-organization/:substring')
-  @UseInterceptors(VerifyJWTAndFetchPayload)
   async searchCurrencies(
-    @Req() request: RequestWithJWTTokenPayloadAndToken,
     @Param('substring') substring: string,
+    @Query('organizationId') organizationId: string,
   ) {
-    const jwtTokenPayload: JwtTokenPayload = request.tokenPayload;
     const currencies = await this.currencyService.searchNonOrgCurrencies(
       substring,
-      jwtTokenPayload.sub,
+      organizationId,
     );
     return {
       status: CallStatuses.Success,
@@ -135,39 +122,31 @@ export class CurrencyController {
   }
 
   @Post(`/org-data-needed-by-customer`)
-  @UseInterceptors(VerifyJWTAndFetchPayload)
   async getOrganizationCurrencies(
-    @Req() request: RequestWithJWTTokenPayloadAndToken,
-    @Body() form: GetOrgCurrenciesForm,
+    @Body() form: { organizationId: string; customerId?: string },
   ) {
-    const jwtTokenPayload: JwtTokenPayload = request.tokenPayload;
-
     const data = await this.currencyService.getOrgDataForCustomer(
       form.organizationId,
-      jwtTokenPayload.sub,
+      form.customerId ?? '',
     );
     return {
       status: CallStatuses.Success,
       data,
     };
-    // bug: DO NOT return full organization.
   }
 
   @Post(`/filter-organization-created-currencies`)
-  @UseInterceptors(VerifyJWTAndFetchPayload)
+  @UsePipes(new JoiValidationPipe(FilterOrgCurrenciesSchema))
   async filterOrgCreatedCurrencies(
-    @Req() request: RequestWithJWTTokenPayloadAndToken,
-    @Body() form: FilterOrgCreatedCurrenciesForm,
+    @Body() form: { organizationId: string; currencyCodes: string[] },
   ) {
-    const jwtTokenPayload: JwtTokenPayload = request.tokenPayload;
     const data = await this.currencyService.filterOrgCreatedCurrencies(
-      jwtTokenPayload.sub,
+      form.organizationId,
       form.currencyCodes,
     );
     return {
       status: CallStatuses.Success,
       data,
     };
-    // bug: DO NOT return full organization.
   }
 }

@@ -20,8 +20,20 @@ async function bootstrap() {
   const config =
     app.get<ConfigService<ServerSettingsEnvVariables>>(ConfigService);
 
-  if (config.get<string>(envEnums.ENVIRONMENT) !== Environments.prod) {
-    app.enableCors();
+  const environment = config.get<string>(envEnums.ENVIRONMENT);
+
+  if (environment !== Environments.prod) {
+    app.enableCors({
+      origin: ['http://localhost:5173', 'http://localhost:3000'],
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+      credentials: true,
+    });
+  } else {
+    app.enableCors({
+      origin: process.env.CORS_ORIGIN || '*',
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+      credentials: true,
+    });
   }
 
   const swaggerConfig = new DocumentBuilder()
@@ -30,13 +42,18 @@ async function bootstrap() {
     .setVersion('1.0')
     .addTag('loyalty-engine')
     .addBearerAuth()
+    .addApiKey({ type: 'apiKey', name: 'x-api-key', in: 'header' }, 'x-api-key')
     .build();
   const document = SwaggerModule.createDocument(app, swaggerConfig);
   SwaggerModule.setup('api', app, document);
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: false,
+      forbidNonWhitelisted: false,
       transform: true,
+      transformOptions: {
+        enableImplicitConversion: true,
+      },
     }),
   );
   const port = config.get<number>(envEnums.PORT);

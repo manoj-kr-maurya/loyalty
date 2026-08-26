@@ -9,6 +9,7 @@ import { EligibilityCriteria } from 'src/modules/core/eligibility-engine/eligibi
 import { BudgetReservation } from 'src/modules/core/budget-engine/budget-engine.service';
 import { AuditEntry } from 'src/modules/core/audit-engine/audit-engine.service';
 import { RewardEventPayload } from 'src/modules/core/event-engine/event-engine.service';
+import { PrismaService } from 'src/common/services/prismaService';
 
 import { PromotionRepositoryService, PromotionQuery, PromotionRecord } from './promotion-repository.service';
 import { ConflictResolverService, ConflictResolution, ConflictStrategy } from './conflict-resolver.service';
@@ -55,6 +56,7 @@ export class PromoService {
     private readonly couponManager: CouponManagerService,
     private readonly claimManager: ClaimManagerService,
     private readonly promoEvents: PromoEventPublisherService,
+    private readonly prisma: PrismaService,
   ) {}
 
   // ─── Promotion CRUD ────────────────────────────────────────────
@@ -95,6 +97,84 @@ export class PromoService {
       eligibility,
       budget: budgetResult,
     };
+  }
+
+  async createAndPersistPromotion(organizationId: string, form: any) {
+    const program = await this.prisma.rewardProgram.create({
+      data: {
+        organizationId,
+        name: form.name,
+        description: form.description ?? null,
+        programType: 'PROMO',
+        rewardType: form.rewardType ?? 'DISCOUNT',
+        rewardCurrency: form.rewardCurrency ?? 'DEFAULT',
+        budgetEnabled: false,
+        priority: 0,
+        minBankAmount: form.minBankAmount ?? null,
+        businessType: form.businessType ?? [],
+        maxClaimsPerUser: form.maxClaimsPerUser ?? null,
+        maxClaimsTotal: form.maxClaimsTotal ?? null,
+        startDate: form.validFrom ? new Date(form.validFrom) : new Date(),
+        endDate: form.validTo ? new Date(form.validTo) : new Date(),
+        status: 'ACTIVE',
+        isArchived: false,
+      },
+    });
+
+    return program;
+  }
+
+  async updatePromotion(id: string, form: any) {
+    const program = await this.prisma.rewardProgram.update({
+      where: { id },
+      data: {
+        name: form.name,
+        description: form.description ?? null,
+        rewardType: form.rewardType,
+        minBankAmount: form.minBankAmount ?? null,
+        businessType: form.businessType ?? [],
+        maxClaimsPerUser: form.maxClaimsPerUser ?? null,
+        maxClaimsTotal: form.maxClaimsTotal ?? null,
+        startDate: form.validFrom ? new Date(form.validFrom) : undefined,
+        endDate: form.validTo ? new Date(form.validTo) : undefined,
+        status: form.status,
+      },
+    });
+    return program;
+  }
+
+  async upsertRules(
+    programId: string,
+    rules: Array<{
+      name: string;
+      rewardType: string;
+      rewardMode: string;
+      value: number;
+      conditions: any;
+      threshold?: number;
+      ratioBase?: number;
+      meta?: any;
+    }>,
+  ) {
+    await this.prisma.rewardProgramRule.deleteMany({ where: { programId } });
+    const created = await Promise.all(
+      rules.map((r) =>
+        this.prisma.rewardProgramRule.create({
+          data: {
+            programId,
+            name: r.name,
+            rewardType: r.rewardType as any,
+            rewardMode: r.rewardMode as any,
+            value: r.value,
+            conditions: r.conditions ?? { operator: 'AND', conditions: [] },
+            threshold: r.threshold ?? null,
+            ratioBase: r.ratioBase ?? null,
+            meta: r.meta ?? null,
+          },
+        }),
+      ),
+    );
+    return created;
   }
 
   // ─── Promotion Evaluation (Full Pipeline) ──────────────────────
@@ -371,13 +451,20 @@ export class PromoService {
   // ─── Promotion Queries ─────────────────────────────────────────
 
   /** Get active promotions for an organization. */
-  async getActivePromotions(organizationId: string): Promise<PromotionRecord[]> {
-    return this.promotionRepo.findActive({ organizationId, programType: 'PROMO' });
+  async getActivePromotions(organizationId: string): Promise<any[]> {
+    return this.prisma.rewardProgram.findMany({
+      where: { organizationId, programType: 'PROMO' },
+      include: { rules: true },
+      orderBy: { createdAt: 'desc' },
+    });
   }
 
   /** Get a single promotion by ID. */
-  async getPromotionById(id: string): Promise<PromotionRecord | null> {
-    return this.promotionRepo.findById(id);
+  async getPromotionById(id: string): Promise<any> {
+    return this.prisma.rewardProgram.findUnique({
+      where: { id },
+      include: { rules: true },
+    });
   }
 
   /** Search promotions (admin). */

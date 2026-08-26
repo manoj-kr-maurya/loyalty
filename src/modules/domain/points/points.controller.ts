@@ -1,87 +1,96 @@
-import { Body, Controller, Get, Post, UseInterceptors } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
-import { VerifyJWTAndFetchPayload } from 'src/interceptors/auth/verify-jwt-and-fetch-payload';
+import { Body, Controller, Get, Post, UseGuards, UsePipes } from '@nestjs/common';
+import { ApiTags, ApiSecurity } from '@nestjs/swagger';
+import { ApiKeyGuard } from 'src/common/guards/api-key.guard';
+import { JoiValidationPipe } from 'src/common/pipes/joi-validation.pipe';
 import { PointsService } from './points.service';
-import { ProgramFormDto } from './DTO/program.dto';
+import { ProgramFormDto, ProgramFormSchema } from './DTO/program.dto';
 import {
-  RewardCalculationDto,
-  BlockRewardDto,
-  AwardRewardDto,
-  ReverseRewardDto,
-  ExpireRewardDto,
+  RewardCalculationSchema,
+  BlockRewardSchema,
+  AwardRewardSchema,
+  ReverseRewardSchema,
+  ExpireRewardSchema,
 } from './DTO/reward.dto';
 import { FilterContext, RuleDefinition } from 'src/modules/core/rule-engine/rule-engine.types';
 import { EligibilityCriteria } from 'src/modules/core/eligibility-engine/eligibility-engine.service';
 import { BudgetReservation } from 'src/modules/core/budget-engine/budget-engine.service';
 
 @ApiTags('Loyalty Programs')
+@ApiSecurity('x-api-key')
+@UseGuards(ApiKeyGuard)
 @Controller('loyalty-programs')
 export class PointsController {
   constructor(private readonly pointsService: PointsService) {}
 
   @Post('/program/create')
-  @UseInterceptors(VerifyJWTAndFetchPayload)
+  @UsePipes(new JoiValidationPipe(ProgramFormSchema))
   async createProgram(@Body() form: ProgramFormDto) {
     return this.pointsService.createProgram(form);
   }
 
   @Post('/eligible')
-  async findEligiblePrograms(@Body() body: RewardCalculationDto) {
-    const context: FilterContext = body as any;
-    const criteria: EligibilityCriteria = body as any;
+  @UsePipes(new JoiValidationPipe(RewardCalculationSchema))
+  async findEligiblePrograms(@Body() body: any) {
+    const context: FilterContext = body;
+    const criteria: EligibilityCriteria = body;
     return this.pointsService.findEligiblePrograms(context, criteria);
   }
 
   @Post('/calculate')
-  async calculateRewards(@Body() body: RewardCalculationDto) {
-    const context: FilterContext = body as any;
-    const criteria: EligibilityCriteria = body as any;
-    const rules = (body as any).rules ?? [];
+  @UsePipes(new JoiValidationPipe(RewardCalculationSchema))
+  async calculateRewards(@Body() body: any) {
+    const context: FilterContext = body;
+    const criteria: EligibilityCriteria = body;
+    const rules = body.rules ?? [];
     return this.pointsService.calculateRewards(context, criteria, rules);
   }
 
   @Post('/block')
-  async blockRewards(@Body() body: BlockRewardDto) {
-    const context: FilterContext = body as any;
-    const criteria: EligibilityCriteria = body as any;
-    const rules = (body as any).rules ?? [];
+  @UsePipes(new JoiValidationPipe(BlockRewardSchema))
+  async blockRewards(@Body() body: any) {
+    const context: FilterContext = body;
+    const criteria: EligibilityCriteria = body;
+    const rules = body.rules ?? [];
     const budgetReservation: BudgetReservation = {
-      programId: (body as any).programId ?? '',
-      amount: (body as any).amount ?? 0,
-      currency: (body as any).currency,
-      reference: (body as any).reference,
+      programId: body.programId ?? '',
+      amount: body.amount ?? 0,
+      currency: body.currency,
+      reference: body.reference,
     };
     return this.pointsService.blockRewards(context, criteria, rules, budgetReservation);
   }
 
   @Post('/award')
-  async awardRewards(@Body() body: AwardRewardDto) {
-    const context: FilterContext = body as any;
-    const rules = (body as any).rules ?? [];
+  @UsePipes(new JoiValidationPipe(AwardRewardSchema))
+  async awardRewards(@Body() body: any) {
+    const context: FilterContext = body;
+    const rules = body.rules ?? [];
     const budgetReservation: BudgetReservation = {
-      programId: (body as any).programId ?? '',
-      amount: (body as any).amount ?? 0,
-      currency: (body as any).currency,
-      reference: (body as any).reference,
+      programId: body.programId ?? '',
+      amount: body.amount ?? 0,
+      currency: body.currency,
+      reference: body.reference,
     };
     return this.pointsService.awardRewards(context, rules, budgetReservation);
   }
 
   @Post('/reverse')
-  async reverseRewards(@Body() body: ReverseRewardDto) {
+  @UsePipes(new JoiValidationPipe(ReverseRewardSchema))
+  async reverseRewards(@Body() body: any) {
     return this.pointsService.reverseRewards(
-      (body as any).referenceId ?? '',
-      (body as any).programId ?? '',
-      (body as any).customerId ?? '',
+      body.referenceId ?? '',
+      body.programId ?? '',
+      body.customerId ?? '',
     );
   }
 
   @Post('/expire')
-  async expireRewards(@Body() body: ExpireRewardDto) {
+  @UsePipes(new JoiValidationPipe(ExpireRewardSchema))
+  async expireRewards(@Body() body: any) {
     return this.pointsService.expireRewards(
-      (body as any).programId ?? '',
-      (body as any).customerId ?? '',
-      (body as any).amount ?? 0,
+      body.programId ?? '',
+      body.customerId ?? '',
+      body.amount ?? 0,
     );
   }
 }

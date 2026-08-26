@@ -1,65 +1,23 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString } from 'class-validator';
+import * as Joi from 'joi';
 
 export class UpdateShopForm {
-  @ApiProperty({
-    description: `Organization's name`,
-    example: 'X',
-    type: String,
-  })
-  @IsString()
-  shopId: string;
-  @ApiPropertyOptional({
-    description: `Organization's name`,
-    example: 'X',
-    type: String,
-  })
-  @IsOptional()
-  @IsString()
-  name?: string;
-
-  @ApiPropertyOptional({
-    description: `Organization's address`,
-    example: 'Xniwqjdnqwd',
-    type: String,
-  })
-  @IsOptional()
-  @IsString()
-  address?: string;
-
-  @ApiPropertyOptional({
-    description: `Organization's upi id`,
-    example: '9999999999@bank',
-    type: String,
-  })
-  @IsOptional()
-  @IsString()
-  upiURI?: string;
-
-  @ApiPropertyOptional({
-    description: `orgs contact us`,
-    example: '9999999999@bank',
-    type: String,
-  })
-  @IsOptional()
-  @IsString()
-  contactUs?: string;
-
-  @ApiPropertyOptional({
-    description: `Organization's in their own words, operational hours`,
-    example: '9999999999@bank',
-    type: String,
-  })
-  @IsOptional()
-  @IsString()
-  operationalHours?: string;
-
-  @ApiPropertyOptional({
-    description: `Organization's about us`,
-    example: '9999999999@bank',
-    type: String,
-  })
-  @IsOptional()
-  @IsString()
-  aboutUs?: string;
+  @ApiProperty({ type: String }) shopId: string;
+  @ApiPropertyOptional({ type: String }) name?: string;
+  @ApiPropertyOptional({ type: String }) address?: string;
+  @ApiPropertyOptional({ type: String }) upiURI?: string;
+  @ApiPropertyOptional({ type: String }) contactUs?: string;
+  @ApiPropertyOptional({ type: String }) operationalHours?: string;
+  @ApiPropertyOptional({ type: String }) aboutUs?: string;
 }
+
+export const UpdateShopSchema = Joi.object({
+  shopId: Joi.string().required(),
+  name: Joi.string().optional(),
+  address: Joi.string().optional(),
+  upiURI: Joi.string().optional(),
+  contactUs: Joi.string().optional(),
+  operationalHours: Joi.string().optional(),
+  aboutUs: Joi.string().optional(),
+  organizationId: Joi.string().optional(),
+}).unknown(true);

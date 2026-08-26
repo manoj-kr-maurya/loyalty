@@ -130,16 +130,25 @@ export class DiscountEngineService {
         discountAmount = (award.amount / 100) * transactionAmount;
         break;
 
-      case 'RATIO':
-        // award.amount = points per base unit; ratioBase = base amount
-        // e.g., 5 points per ₹100 → discountAmount = (txnAmount / 100) * 5
-        discountAmount = award.amount;
+      case 'RATIO': {
+        // award.amount = points per ratioBase units of spend.
+        // e.g. 5 points per ₹100 -> discountAmount = (txnAmount / 100) * 5.
+        const ratioBase = (award.meta as { ratioBase?: number } | undefined)
+          ?.ratioBase;
+        discountAmount =
+          ratioBase && ratioBase > 0
+            ? (transactionAmount / ratioBase) * award.amount
+            : award.amount;
         break;
+      }
 
-      case 'MULTIPLIER':
-        // Multiplier on base points — treated as final amount
-        discountAmount = award.amount;
+      case 'MULTIPLIER': {
+        // award.amount is a multiplier (e.g. 2x) applied to a base.
+        // base defaults to the transaction amount unless supplied in meta.
+        const base = (award.meta as { base?: number } | undefined)?.base;
+        discountAmount = (base ?? transactionAmount) * award.amount;
         break;
+      }
 
       case 'SLAB':
       case 'MILESTONE':

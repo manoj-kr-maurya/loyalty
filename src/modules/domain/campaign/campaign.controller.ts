@@ -4,54 +4,45 @@ import {
   Get,
   Param,
   Post,
-  Req,
-  UseInterceptors,
+  Query,
+  UseGuards,
+  UsePipes,
 } from '@nestjs/common';
 import { CampaignService } from './campaign.service';
 import { CallStatuses } from 'src/common/enums/status-codes';
 import { CampaignResponseCodes } from './enums/responseCodes';
-import {
-  CreateOrEditOrganizationCampaignForm,
-  PotentialEarningForm,
-} from './DTO/campaign.dto';
-import { ApiTags } from '@nestjs/swagger';
-import {
-  RequestWithJWTTokenPayloadAndToken,
-  JwtTokenPayload,
-} from '../auth/DTO/jwt.dto';
-import { VerifyJWTAndFetchPayload } from 'src/interceptors/auth/verify-jwt-and-fetch-payload';
+import { ApiSecurity, ApiTags } from '@nestjs/swagger';
+import { ApiKeyGuard } from 'src/common/guards/api-key.guard';
+import { JoiValidationPipe } from 'src/common/pipes/joi-validation.pipe';
+import { CreateOrEditOrganizationCampaignForm } from './DTO/campaign.dto';
+
 @ApiTags('Campaign')
+@ApiSecurity('x-api-key')
+@UseGuards(ApiKeyGuard)
 @Controller('campaign')
 export class CampaignController {
   constructor(private readonly campaignService: CampaignService) {}
 
   @Post('/create-organization-level-campaign')
-  @UseInterceptors(VerifyJWTAndFetchPayload)
   async create_organization_level_campaign(
-    @Body() form: CreateOrEditOrganizationCampaignForm,
-    @Req() request: RequestWithJWTTokenPayloadAndToken,
+    @Body() form: CreateOrEditOrganizationCampaignForm & { organizationId: string },
   ): Promise<{ status: CallStatuses; code: CampaignResponseCodes; data: any }> {
-    const jwtTokenPayload: JwtTokenPayload = request.tokenPayload;
-    const organizationId = jwtTokenPayload.sub;
-    const data = await this.campaignService.createOrganizationLevelCampaign(
-      form,
+    const { organizationId, ...data } = form;
+    const result = await this.campaignService.createOrganizationLevelCampaign(
+      data as any,
       organizationId,
     );
     return {
       status: CallStatuses.Success,
       code: CampaignResponseCodes.Campaign_Created,
-      data,
+      data: result,
     };
   }
 
   @Get('/get-organization-level-campaigns')
-  @UseInterceptors(VerifyJWTAndFetchPayload)
   async get_organization_level_campaigns(
-    @Req() request: RequestWithJWTTokenPayloadAndToken,
+    @Query('organizationId') organizationId: string,
   ): Promise<{ status: CallStatuses; code: CampaignResponseCodes; data: any }> {
-    const jwtTokenPayload: JwtTokenPayload = request.tokenPayload;
-    const organizationId = jwtTokenPayload.sub;
-
     const data = await this.campaignService.getOrganizationLevelCampaigns(
       organizationId,
     );
@@ -63,14 +54,10 @@ export class CampaignController {
   }
 
   @Get('/get-organization-level-campaign/:id')
-  @UseInterceptors(VerifyJWTAndFetchPayload)
   async get_organization_level_campaign(
-    @Req() request: RequestWithJWTTokenPayloadAndToken,
+    @Query('organizationId') organizationId: string,
     @Param('id') id: string,
   ): Promise<{ status: CallStatuses; code: CampaignResponseCodes; data: any }> {
-    const jwtTokenPayload: JwtTokenPayload = request.tokenPayload;
-    const organizationId = jwtTokenPayload.sub;
-
     const data = await this.campaignService.getOrganizationLevelCampaign(
       organizationId,
       id,
@@ -83,28 +70,24 @@ export class CampaignController {
   }
 
   @Post('/update-organization-level-campaign')
-  @UseInterceptors(VerifyJWTAndFetchPayload)
   async update_organization_level_campaign(
-    @Body() form: CreateOrEditOrganizationCampaignForm,
-    @Req() request: RequestWithJWTTokenPayloadAndToken,
+    @Body() form: CreateOrEditOrganizationCampaignForm & { organizationId: string },
   ): Promise<{ status: CallStatuses; code: CampaignResponseCodes; data: any }> {
-    const jwtTokenPayload: JwtTokenPayload = request.tokenPayload;
-    const organizationId = jwtTokenPayload.sub;
-    const data = await this.campaignService.updateOrganizationLevelCampaign(
-      form,
+    const { organizationId, ...data } = form;
+    const result = await this.campaignService.updateOrganizationLevelCampaign(
+      data as any,
       organizationId,
     );
     return {
       status: CallStatuses.Success,
       code: CampaignResponseCodes.Campaign_Updated,
-      data,
+      data: result,
     };
   }
 
   @Post('/get-active-campaigns-potential-earning')
-  @UseInterceptors(VerifyJWTAndFetchPayload)
   async getActiveCampaignOfOrganizationAndTheirPotentialEarning(
-    @Body() form: PotentialEarningForm,
+    @Body() form: any,
   ): Promise<{ status: CallStatuses; code: CampaignResponseCodes; data: any }> {
     const data =
       await this.campaignService.getActiveCampaignOfOrganizationAndTheirPotentialEarning(

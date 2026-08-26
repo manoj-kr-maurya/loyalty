@@ -4,42 +4,39 @@ import {
   Get,
   Param,
   Post,
-  Req,
-  UseInterceptors,
+  Query,
+  UseGuards,
+  UsePipes,
 } from '@nestjs/common';
 import { Customer } from '@prisma/client';
 import { CallStatuses } from 'src/common/enums/status-codes';
 import {
-  GetCustomerParams,
-  OtpPhoneFindOrCreateCustomerForm,
-  OtpValidateOtpBodyForm,
-  UpdateCustomerForm,
+  OtpPhoneFindOrCreateSchema,
+  OtpValidateOtpSchema,
+  UpdateCustomerSchema,
+  LogoutCustomerSchema,
 } from './DTO/customer.dto';
 import { CustomerService } from './customer.service';
 import { CustomerResponseCodes } from './enums/responseCodes';
-import { ApiTags } from '@nestjs/swagger';
-import {
-  RequestWithJWTTokenPayloadAndToken,
-  JwtTokenPayload,
-} from '../auth/DTO/jwt.dto';
-import { VerifyJWTAndFetchPayload } from 'src/interceptors/auth/verify-jwt-and-fetch-payload';
-import { CacheResponseInterceptor } from 'src/interceptors/cache/cache-response.interceptor';
+import { ApiSecurity, ApiTags } from '@nestjs/swagger';
+import { ApiKeyGuard } from 'src/common/guards/api-key.guard';
+import { JoiValidationPipe } from 'src/common/pipes/joi-validation.pipe';
 
 @ApiTags('Customer')
+@ApiSecurity('x-api-key')
+@UseGuards(ApiKeyGuard)
 @Controller('customer')
 export class CustomerController {
   constructor(private readonly customerService: CustomerService) {}
 
   @Get(`/`)
-  @UseInterceptors(VerifyJWTAndFetchPayload)
   async getCustomer(
-    @Req() request: RequestWithJWTTokenPayloadAndToken,
+    @Query('customerId') customerId: string,
     @Param() balances: boolean,
   ) {
-    const jwtTokenPayload: JwtTokenPayload = request.tokenPayload;
     const data =
       await this.customerService.someFunctionThatMyGetCustomerEndPointWillCall(
-        jwtTokenPayload.sub,
+        customerId,
         balances,
       );
     return {
@@ -47,37 +44,30 @@ export class CustomerController {
       code: CustomerResponseCodes.Customer_Found,
       data,
     };
-    // bug: DO NOT return full customer.
   }
 
   @Get(`/:customerId`)
-  // @UseInterceptors(VerifyJWTAndFetchPayload)
-  async getCustomerWithId(@Param() params: GetCustomerParams) {
-    const customer = await this.customerService.getCustomerById(
-      params.customerId,
-    );
+  async getCustomerWithId(@Param('customerId') customerId: string) {
+    const customer = await this.customerService.getCustomerById(customerId);
     return {
       status: CallStatuses.Success,
       code: CustomerResponseCodes.Customer_Found,
       data: customer,
-    }; // bug: DO NOT return full customer.
+    };
   }
 
   @Post('/otp/phone')
-  // @UseInterceptors(VerifyJWTAndFetchPayload)
+  @UsePipes(new JoiValidationPipe(OtpPhoneFindOrCreateSchema))
   async findOrCreateCustomersAndProceedOTPAuthentication(
-    @Body() form: OtpPhoneFindOrCreateCustomerForm,
-    // @Req() request: RequestWithJWTTokenPayloadAndToken,
+    @Body() form: { countryCode: string; phoneNumber: string; name?: string },
   ): Promise<{
     status: CallStatuses;
     code: CustomerResponseCodes;
     data: string;
   }> {
-    // const jwtTokenPayload: JwtTokenPayload = request.tokenPayload;
     const customerId =
       await this.customerService.findOrCreateCustomersAndProceedPhoneAuthentication(
-        form,
-        // jwtTokenPayload.sub,
+        form as any,
       );
     return {
       status: CallStatuses.Success,
@@ -87,16 +77,16 @@ export class CustomerController {
   }
 
   @Post('/otp/validate')
-  // @UseInterceptors(VerifyJWTAndFetchPayload)
+  @UsePipes(new JoiValidationPipe(OtpValidateOtpSchema))
   async validateOtpAndGenerateToken(
-    @Body() form: OtpValidateOtpBodyForm,
+    @Body() form: { id?: string; otp: string },
   ): Promise<{
     data: { token: string; customer: Customer };
     status: CallStatuses;
     message: string;
   }> {
     const { token, customer } =
-      await this.customerService.validateOtpAndGenerateToken(form);
+      await this.customerService.validateOtpAndGenerateToken(form as any);
     return {
       data: { token, customer },
       status: CallStatuses.Success,
@@ -105,23 +95,21 @@ export class CustomerController {
   }
 
   @Post(`/logout`)
-  @UseInterceptors(VerifyJWTAndFetchPayload)
-  async logoutCustomer(@Req() request: RequestWithJWTTokenPayloadAndToken) {
-    const jwtTokenPayload: JwtTokenPayload = request.tokenPayload;
-    return await this.customerService.logoutCustomer(jwtTokenPayload.sub);
+  @UsePipes(new JoiValidationPipe(LogoutCustomerSchema))
+  async logoutCustomer(@Body('customerId') customerId: string) {
+    return await this.customerService.logoutCustomer(customerId);
   }
 
   @Post('/update')
-  @UseInterceptors(VerifyJWTAndFetchPayload)
-  async updateOrganization(
-    @Req() request: RequestWithJWTTokenPayloadAndToken,
-    @Body() form: UpdateCustomerForm,
+  @UsePipes(new JoiValidationPipe(UpdateCustomerSchema))
+  async updateCustomer(
+    @Body() form: { customerId: string; name?: string; base64Logo?: string },
   ) {
-    const customerId = request.tokenPayload.sub;
+    const { customerId, ...data } = form;
     const customer =
       await this.customerService.someFunctionThatMyUpdateCustomerEndPointWillCall(
         customerId,
-        form,
+        data,
       );
     return {
       status: CallStatuses.Success,
@@ -131,14 +119,6 @@ export class CustomerController {
   }
 
   @Get('/leader-board/top-customers')
-  @UseInterceptors(
-    VerifyJWTAndFetchPayload,
-    CacheResponseInterceptor.register({
-      ttl: 60, // 1 minute cache TTL
-      keyPrefix: 'customer-leaderboard',
-      includeQueryParams: true, // This will include any query params in the cache key
-    }),
-  )
   async getTopCustomersForLeaderBoard() {
     const leaderBoardEntries =
       await this.customerService.getTopCustomersForLeaderBoard();

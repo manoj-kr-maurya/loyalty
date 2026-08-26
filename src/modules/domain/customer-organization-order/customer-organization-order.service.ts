@@ -1,4 +1,9 @@
-import { Injectable, BadRequestException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  ForbiddenException,
+  Logger,
+} from '@nestjs/common';
 import {
   BurningCoinAmountDetailsDto,
   CreateCustomerOrganizationOrderDto,
@@ -13,6 +18,8 @@ import {
   OrganizationRoles,
   Prisma,
 } from '@prisma/client';
+import { JwtTokenPayload } from '../auth/DTO/jwt.dto';
+import { UserTypes } from 'src/common/enums/user-types';
 import { OrganizationService } from '../organization/organization.service';
 import { CampaignService } from '../campaign/campaign.service';
 import {
@@ -69,6 +76,37 @@ export class CustomerOrganizationOrderService {
     customerId: string,
     form: CreateCustomerOrganizationOrderDto,
   ): Promise<CustomerOrganizationOrder> {
+    // Idempotency guard (fixes C5): a repeated create with the same key
+    // for the same customer returns the original order.
+    if (form.idempotencyKey) {
+      const existing =
+        await this.prismaService.customerOrganizationOrder.findFirst({
+          where: { customerId, idempotencyKey: form.idempotencyKey },
+        });
+      if (existing) return existing;
+    }
+
+    try {
+      return await this.performCreateCustomerOrganizationOrder(customerId, form);
+    } catch (error) {
+      // Race between the pre-check and the insert: the unique index on
+      // (customerId, idempotencyKey) will reject the duplicate — return the
+      // original instead of failing.
+      if (form.idempotencyKey && (error as { code?: string })?.code === 'P2002') {
+        const existing =
+          await this.prismaService.customerOrganizationOrder.findFirst({
+            where: { customerId, idempotencyKey: form.idempotencyKey },
+          });
+        if (existing) return existing;
+      }
+      throw error;
+    }
+  }
+
+  private async performCreateCustomerOrganizationOrder(
+    customerId: string,
+    form: CreateCustomerOrganizationOrderDto,
+  ): Promise<CustomerOrganizationOrder> {
     // Validate the burning amount details
     this.validateBurningAmountDetails(form.burningAmountDetails);
 
@@ -113,6 +151,7 @@ export class CustomerOrganizationOrderService {
             organization: { connect: { id: form.organizationId } },
             physicalCurrency: 'INR',
             status: CustomerOrganizationOrderStatus.INITIATED,
+            ...(form.idempotencyKey && { idempotencyKey: form.idempotencyKey }),
             customerBurningAmountDetail: {
               create: {
                 totalAmount: form.burningAmountDetails.totalAmount,
@@ -513,12 +552,21 @@ export class CustomerOrganizationOrderService {
   }
   async handleUpdateCustomerOrganizationOrder(
     form: UpdateCustomerOrganizationOrderDto,
+    caller: JwtTokenPayload,
   ) {
     return await this.prismaService.$transaction(async () => {
       const order: CustomerOrganizationOrderWithDetails =
         await this.customerOrganizationOrderPrismaHelperService.findCustomerOrganizationOrderWithAllNestedDetails(
           { id: form.orderId },
         );
+
+      if (!order) {
+        throw new BadRequestException('Order not found');
+      }
+
+      // Authorization (fixes C4): only the owning organization (or its
+      // admin/shop) may transition an order's status.
+      await this.assertCanUpdateOrder(caller, order.organizationId);
 
       if (!validTransitions[order.status].includes(form.status)) {
         throw new BadRequestException(
@@ -551,6 +599,44 @@ export class CustomerOrganizationOrderService {
         { status: form.status },
       );
     });
+  }
+
+  /**
+   * Ensures the caller is allowed to transition an order's status.
+   * - Customers can never update organization orders.
+   * - An ADMIN org can update orders for itself and for its invited shops.
+   * - A SHOP org can only update its own orders.
+   */
+  private async assertCanUpdateOrder(
+    caller: JwtTokenPayload,
+    orderOrganizationId: string,
+  ): Promise<void> {
+    if (caller.tokenType === UserTypes.customer) {
+      throw new ForbiddenException(
+        'Customers are not allowed to update organization orders',
+      );
+    }
+
+    const callerOrg = await this.organizationService.getOrganization(caller.sub);
+    if (!callerOrg) {
+      throw new ForbiddenException('Caller organization not found');
+    }
+
+    if (callerOrg.role === OrganizationRoles.ADMIN) {
+      if (orderOrganizationId === caller.sub) return;
+      const shops =
+        await this.organizationService.getInvitedShopsAsOrganizationData(
+          caller.sub,
+        );
+      if (shops.some((shop) => shop.id === orderOrganizationId)) return;
+      throw new ForbiddenException(
+        'You are not authorized to update this order',
+      );
+    }
+
+    // SHOP (or any other non-admin role)
+    if (orderOrganizationId === caller.sub) return;
+    throw new ForbiddenException('You are not authorized to update this order');
   }
 
   private async handleOrderCompletion(

@@ -3,35 +3,32 @@ import {
   Get,
   Param,
   Query,
-  Req,
-  UseInterceptors,
+  UseGuards,
   ValidationPipe,
 } from '@nestjs/common';
 import { CallStatuses } from 'src/common/enums/status-codes';
-
-import { ApiTags } from '@nestjs/swagger';
+import { ApiSecurity, ApiTags } from '@nestjs/swagger';
 import { PaginationQueryDto } from 'src/common/dto/pagination.dto';
 import { CustomerWalletService } from './customer-wallets.service';
-import { VerifyJWTAndFetchPayload } from 'src/interceptors/auth/verify-jwt-and-fetch-payload';
-import { RequestWithJWTTokenPayloadAndToken } from '../auth/DTO/jwt.dto';
+import { ApiKeyGuard } from 'src/common/guards/api-key.guard';
 import { CustomerWalletResponseCodes } from './enums/responseCodes';
 
 @ApiTags('customer-wallets')
+@ApiSecurity('x-api-key')
+@UseGuards(ApiKeyGuard)
 @Controller('customer-wallets')
 export class CustomerWalletController {
   constructor(private readonly service: CustomerWalletService) {}
 
   @Get('/fetch-customer-wallets')
-  @UseInterceptors(VerifyJWTAndFetchPayload)
   async fetchCustomerWallets(
-    @Req() request: RequestWithJWTTokenPayloadAndToken,
+    @Query('organizationId') organizationId: string,
     @Query(new ValidationPipe({ transform: true })) query: PaginationQueryDto,
   ) {
     const { wallets, metadata } = await this.service.fetchCustomerWallets(
-      request.tokenPayload.sub,
+      organizationId,
       query,
     );
-
     return {
       status: CallStatuses.Success,
       data: wallets,
@@ -40,18 +37,16 @@ export class CustomerWalletController {
   }
 
   @Get('/fetch-currency-wallet/:id')
-  @UseInterceptors(VerifyJWTAndFetchPayload)
   async fetchCurrencyWallet(
-    @Req() request: RequestWithJWTTokenPayloadAndToken,
+    @Query('organizationId') organizationId: string,
     @Param('id') id: string,
     @Query(new ValidationPipe({ transform: true })) query: PaginationQueryDto,
   ) {
     const { pockets, metadata } = await this.service.fetchCurrencyWalletPockets(
-      request.tokenPayload.sub,
+      organizationId,
       id,
       query,
     );
-
     return {
       status: CallStatuses.Success,
       data: pockets,
@@ -60,14 +55,10 @@ export class CustomerWalletController {
   }
 
   @Get('/broad-customer-balance')
-  @UseInterceptors(VerifyJWTAndFetchPayload)
   async fetchBroadCustomerBalance(
-    @Req() request: RequestWithJWTTokenPayloadAndToken,
+    @Query('organizationId') organizationId: string,
   ) {
-    const data = await this.service.fetchBroadCustomerBalance(
-      request.tokenPayload.sub,
-    );
-
+    const data = await this.service.fetchBroadCustomerBalance(organizationId);
     return {
       code: CustomerWalletResponseCodes.Broad_Customer_Balance_Fetched,
       status: CallStatuses.Success,

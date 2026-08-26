@@ -277,6 +277,10 @@ model RewardProgram {
   priority           Int               @default(0)
   business           String?
   category           String?
+  minBankAmount      Decimal?          @db.Decimal(12, 2)
+  businessType       Json?
+  maxClaimsPerUser   Int?
+  maxClaimsTotal     Int?
   startDate          DateTime          @default(now())
   endDate            DateTime          @default(now())
   timezone           String?           @default("UTC")
@@ -432,6 +436,7 @@ model CustomerOrganizationOrder {
   customerBurningAmountDetail CustomerBurningAmountDetail?
   physicalCurrency            String
   status                      CustomerOrganizationOrderStatus
+  idempotencyKey              String?
   createdAt                   DateTime                                 @default(now())
   updatedAt                   DateTime                                 @updatedAt
   customerEarningAmountDetail CustomerEarningAmountDetail?
@@ -443,6 +448,7 @@ model CustomerOrganizationOrder {
   @@index([organizationId])
   @@index([status])
   @@index([createdAt])
+  @@unique([customerId, idempotencyKey])
   @@map("customerOrganizationOrder")
 }
 

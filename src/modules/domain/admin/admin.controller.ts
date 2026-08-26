@@ -5,12 +5,13 @@ import {
   Param,
   Post,
   Query,
+  UseGuards,
   ValidationPipe,
 } from '@nestjs/common';
 import { AdminService } from './admin.service';
 import { CallStatuses } from 'src/common/enums/status-codes';
 
-import { ApiTags, ApiResponse, ApiOperation } from '@nestjs/swagger';
+import { ApiTags, ApiResponse, ApiOperation, ApiSecurity } from '@nestjs/swagger';
 import {
   PaginationQueryDto,
   PaginatedResponse,
@@ -22,8 +23,11 @@ import {
 } from 'src/modules/domain/organization/DTO/organization-response.dto';
 import { InviteAdminForm } from './DTO/admin.dto';
 import { AdminResponseCodes } from './enums/responseCodes';
+import { ApiKeyGuard } from 'src/common/guards/api-key.guard';
 
 @ApiTags('Admin')
+@ApiSecurity('x-api-key')
+@UseGuards(ApiKeyGuard)
 @Controller('admin')
 export class AdminController {
   constructor(private readonly adminService: AdminService) {}

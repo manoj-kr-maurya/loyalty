@@ -52,13 +52,22 @@ export class OrganizationService {
   async findOrCreateOrganizationAndProceedPhoneAuthentication(
     form: LoginOrganizationOtpForm,
   ) {
-    const invite = await this.commonDbService.findInvite({
-      assignedTo: form.phoneNumber,
-    });
+    let invite: Invite | null = null;
+    try {
+      invite = await this.commonDbService.findInvite({
+        assignedTo: form.phoneNumber,
+      });
+    } catch {
+      // No invite found — allow self-registration as ADMIN
+    }
+
+    const role = invite?.role || OrganizationRoles.ADMIN;
+    const orgAdminId = invite?.orgAdminId || undefined;
+
     const organization = await this.findOrCreateOrganization({
       ...form,
-      role: invite.role,
-      orgAdminId: invite.orgAdminId,
+      role,
+      orgAdminId,
     });
 
     if (organization.role === OrganizationRoles.ADMIN) {
@@ -118,24 +127,35 @@ export class OrganizationService {
     organization.token = token;
     if (!organization.isVerified) {
       const { id, ...dataWithoutId } = organization;
-      const invite = await this.commonDbService.findInvite({
-        assignedTo: organization.phoneNumber,
-      });
-      const { id: inviteId, ...inviteDataWithoutId } = invite;
-      if (!invite.isUsed) {
-        await this.commonDbService.updateInvite(
-          { ...inviteDataWithoutId, isUsed: true },
-          {
-            id: inviteId,
-          },
-        );
+      let parentOrganizationName = '';
+      let address = '';
+
+      try {
+        const invite = await this.commonDbService.findInvite({
+          assignedTo: organization.phoneNumber,
+        });
+        const { id: inviteId, ...inviteDataWithoutId } = invite;
+        if (!invite.isUsed) {
+          await this.commonDbService.updateInvite(
+            { ...inviteDataWithoutId, isUsed: true },
+            {
+              id: inviteId,
+            },
+          );
+        }
+        const parentOrganization = await this.getParentOrganization(invite);
+        parentOrganizationName = parentOrganization?.name ?? '';
+        address = invite.location;
+      } catch {
+        // No invite found for self-registered org
+        parentOrganizationName = '';
       }
-      const parentOrganization = await this.getParentOrganization(invite);
+
       await this.organizationPrismaHelperService.updateOrganization(
         {
           ...dataWithoutId,
-          name: parentOrganization?.name ?? '',
-          address: invite.location,
+          name: parentOrganizationName,
+          address,
           isVerified: true,
         },
         {
