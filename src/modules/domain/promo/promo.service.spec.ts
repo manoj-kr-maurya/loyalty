@@ -11,6 +11,8 @@ import { DiscountEngineService } from './discount-engine.service';
 import { CouponManagerService, CouponBlock } from './coupon-manager.service';
 import { ClaimManagerService, ClaimRecord } from './claim-manager.service';
 import { PromoEventPublisherService } from './promo-event-publisher.service';
+import { CouponValidatorService } from './coupon-validator.service';
+import { SephoraResponseMapper } from './sephora-response.mapper';
 import { PrismaService } from 'src/common/services/prismaService';
 
 describe('PromoService', () => {
@@ -195,6 +197,24 @@ describe('PromoService', () => {
             emitCouponClaimed: jest.fn(),
             emitClaimRecorded: jest.fn(),
             emitClaimRevoked: jest.fn(),
+          }),
+        },
+        {
+          provide: CouponValidatorService,
+          useFactory: () => ({
+            validate: jest.fn().mockResolvedValue({ isApplicable: true, isApplied: false, couponApplicableMessage: '' }),
+            validateAll: jest.fn().mockResolvedValue(new Map()),
+            addRule: jest.fn(),
+          }),
+        },
+        {
+          provide: SephoraResponseMapper,
+          useFactory: () => ({
+            mapToResponse: jest.fn().mockReturnValue({ available_coupon_list: [], page: { current: 1, total: 1, has_previous: false, has_next: false, total_item_count: 0 } }),
+            mapPromoToCoupon: jest.fn().mockReturnValue({}),
+            mapCouponType: jest.fn().mockReturnValue('absolute'),
+            formatExpiryDate: jest.fn().mockReturnValue(''),
+            buildOfferText: jest.fn().mockReturnValue(''),
           }),
         },
         {
@@ -476,12 +496,14 @@ describe('PromoService', () => {
       prisma.rewardProgram.findMany.mockResolvedValue([mockPromotion] as any);
       const result = await service.getActivePromotions('org-1');
 
-      expect(result).toEqual([mockPromotion]);
-      expect(prisma.rewardProgram.findMany).toHaveBeenCalledWith({
-        where: { organizationId: 'org-1', programType: 'PROMO' },
-        include: { rules: true },
-        orderBy: { createdAt: 'desc' },
-      });
+      expect(result).toHaveProperty('available_coupon_list');
+      expect(result).toHaveProperty('page');
+      expect(prisma.rewardProgram.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ organizationId: 'org-1', programType: 'PROMO' }),
+          include: { rules: true },
+        }),
+      );
     });
 
     it('should get promotion by ID', async () => {

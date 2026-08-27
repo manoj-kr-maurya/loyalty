@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { PromoController } from './promo.controller';
 import { PromoService, EvaluatePromotionsOutput } from './promo.service';
+import { CouponCodeService } from './coupon-code.service';
 import { CouponBlock } from './coupon-manager.service';
 import { ClaimRecord } from './claim-manager.service';
 import { PromotionRecord } from './promotion-repository.service';
@@ -83,7 +84,7 @@ describe('PromoController', () => {
             upsertRules: jest.fn().mockResolvedValue([]),
             createPromotion: jest.fn().mockResolvedValue({ success: true, promotion: {} }),
             evaluatePromotions: jest.fn().mockResolvedValue(mockEvaluateOutput),
-            getActivePromotions: jest.fn().mockResolvedValue([mockPromotion]),
+            getActivePromotions: jest.fn().mockResolvedValue({ available_coupon_list: [mockPromotion], page: { current: 1, total: 1, has_previous: false, has_next: false, total_item_count: 1 } }),
             getPromotionById: jest.fn().mockResolvedValue(mockPromotion),
             allocateCoupon: jest.fn().mockResolvedValue(mockCoupon),
             blockCoupon: jest.fn().mockResolvedValue(mockCoupon),
@@ -105,6 +106,19 @@ describe('PromoController', () => {
           provide: ConfigService,
           useFactory: () => ({
             get: jest.fn().mockReturnValue('gyhewd8x34y87ddsyn9738t94587rfybds09t478fts7ndyr7yfd0gyn7t'),
+          }),
+        },
+        {
+          provide: CouponCodeService,
+          useFactory: () => ({
+            generateCodes: jest.fn().mockResolvedValue([
+              { id: 'cc-1', code: 'TESTCODE', isUserSpecific: true, status: 'AVAILABLE', maxUses: 1, usedCount: 0 },
+            ]),
+            validateCode: jest.fn().mockResolvedValue({ isValid: true, message: 'Valid' }),
+            allocateCode: jest.fn().mockResolvedValue({ id: 'cc-1', code: 'TESTCODE', customerId: 'cust-1' }),
+            claimCode: jest.fn().mockResolvedValue({ id: 'cc-1', code: 'TESTCODE', status: 'CLAIMED' }),
+            listCodes: jest.fn().mockResolvedValue([]),
+            getCodeByCustomer: jest.fn().mockResolvedValue(null),
           }),
         },
         {
@@ -172,8 +186,11 @@ describe('PromoController', () => {
     it('should return active promotions for an organization', async () => {
       const result = await controller.getActivePromotions('org-1');
 
-      expect(result).toEqual([mockPromotion]);
-      expect(promoService.getActivePromotions).toHaveBeenCalledWith('org-1');
+      expect(result).toHaveProperty('available_coupon_list');
+      expect(result).toHaveProperty('page');
+      expect(promoService.getActivePromotions).toHaveBeenCalledWith('org-1', expect.objectContaining({
+        organizationId: 'org-1',
+      }));
     });
   });
 

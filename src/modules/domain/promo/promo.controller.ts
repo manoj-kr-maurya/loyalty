@@ -3,6 +3,7 @@ import { ApiTags, ApiOperation, ApiParam, ApiQuery, ApiSecurity } from '@nestjs/
 import { ApiKeyGuard } from 'src/common/guards/api-key.guard';
 import { JoiValidationPipe } from 'src/common/pipes/joi-validation.pipe';
 import { PromoService, EvaluatePromotionsInput } from './promo.service';
+import { CouponCodeService, GenerateCodeInput, ValidateCodeInput } from './coupon-code.service';
 import { PromotionDto, PromotionSchema } from './DTO/promotion.dto';
 import { CouponAllocation, CouponClaim } from './coupon-manager.service';
 import { ClaimInput } from './claim-manager.service';
@@ -12,7 +13,10 @@ import { ClaimInput } from './claim-manager.service';
 @UseGuards(ApiKeyGuard)
 @Controller('promo')
 export class PromoController {
-  constructor(private readonly promoService: PromoService) {}
+  constructor(
+    private readonly promoService: PromoService,
+    private readonly couponCodeService: CouponCodeService,
+  ) {}
 
   @Post('/create')
   @UsePipes(new JoiValidationPipe(PromotionSchema))
@@ -29,10 +33,32 @@ export class PromoController {
   }
 
   @Get('/')
-  @ApiOperation({ summary: 'Get active promotions for an organization' })
+  @ApiOperation({ summary: 'Get active promotions for an organization (Sephora format)' })
   @ApiQuery({ name: 'organizationId', required: true })
-  async getActivePromotions(@Query('organizationId') organizationId: string) {
-    return this.promoService.getActivePromotions(organizationId);
+  @ApiQuery({ name: 'customerId', required: false })
+  @ApiQuery({ name: 'cartValue', required: false })
+  @ApiQuery({ name: 'cartCategories', required: false })
+  @ApiQuery({ name: 'isBankOffer', required: false })
+  @ApiQuery({ name: 'page', required: false })
+  @ApiQuery({ name: 'limit', required: false })
+  async getActivePromotions(
+    @Query('organizationId') organizationId: string,
+    @Query('customerId') customerId?: string,
+    @Query('cartValue') cartValue?: string,
+    @Query('cartCategories') cartCategories?: string,
+    @Query('isBankOffer') isBankOffer?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.promoService.getActivePromotions(organizationId, {
+      organizationId,
+      customerId,
+      cartValue: cartValue ? Number(cartValue) : undefined,
+      cartCategories: cartCategories ? cartCategories.split(',') : undefined,
+      isBankOffer: isBankOffer === 'true',
+      page: page ? Number(page) : 1,
+      limit: limit ? Number(limit) : 50,
+    } as any);
   }
 
   @Get('/:id')
@@ -122,5 +148,57 @@ export class PromoController {
   @ApiOperation({ summary: 'Get claim summary for a customer' })
   async getCustomerClaimSummary(@Param('customerId') customerId: string) {
     return this.promoService.getCustomerClaimSummary(customerId);
+  }
+
+  // ─── Coupon Code (Auto-generated) ─────────────────────────────
+
+  @Post('/codes/generate')
+  @ApiOperation({ summary: 'Generate auto-generated coupon codes for a promotion' })
+  async generateCodes(@Body() input: GenerateCodeInput) {
+    return this.couponCodeService.generateCodes(input);
+  }
+
+  @Post('/codes/validate')
+  @ApiOperation({ summary: 'Validate a coupon code' })
+  async validateCode(@Body() input: ValidateCodeInput) {
+    return this.couponCodeService.validateCode(input);
+  }
+
+  @Post('/codes/allocate')
+  @ApiOperation({ summary: 'Allocate an available code to a specific customer' })
+  async allocateCode(
+    @Body('programId') programId: string,
+    @Body('customerId') customerId: string,
+  ) {
+    return this.couponCodeService.allocateCode(programId, customerId);
+  }
+
+  @Post('/codes/claim')
+  @ApiOperation({ summary: 'Claim/finalize a coupon code usage' })
+  async claimCode(
+    @Body('code') code: string,
+    @Body('customerId') customerId: string,
+    @Body('transactionRef') transactionRef?: string,
+  ) {
+    return this.couponCodeService.claimCode(code, customerId, transactionRef);
+  }
+
+  @Get('/codes/:programId')
+  @ApiOperation({ summary: 'List all coupon codes for a promotion' })
+  @ApiQuery({ name: 'customerId', required: false })
+  async listCodes(
+    @Param('programId') programId: string,
+    @Query('customerId') customerId?: string,
+  ) {
+    return this.couponCodeService.listCodes(programId, customerId);
+  }
+
+  @Get('/codes/:programId/customer/:customerId')
+  @ApiOperation({ summary: 'Get coupon code for a specific customer' })
+  async getCodeByCustomer(
+    @Param('programId') programId: string,
+    @Param('customerId') customerId: string,
+  ) {
+    return this.couponCodeService.getCodeByCustomer(programId, customerId);
   }
 }

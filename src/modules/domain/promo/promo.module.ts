@@ -9,6 +9,9 @@ import { DiscountEngineService } from './discount-engine.service';
 import { CouponManagerService } from './coupon-manager.service';
 import { ClaimManagerService } from './claim-manager.service';
 import { PromoEventPublisherService } from './promo-event-publisher.service';
+import { CouponValidatorService } from './coupon-validator.service';
+import { CouponCodeService } from './coupon-code.service';
+import { SephoraResponseMapper } from './sephora-response.mapper';
 import { RuleEngineModule } from 'src/modules/core/rule-engine/rule-engine.module';
 import { EligibilityEngineModule } from 'src/modules/core/eligibility-engine/eligibility-engine.module';
 import { BudgetEngineModule } from 'src/modules/core/budget-engine/budget-engine.module';
@@ -36,6 +39,9 @@ import { PrismaService } from 'src/common/services/prismaService';
     CouponManagerService,
     ClaimManagerService,
     PromoEventPublisherService,
+    CouponValidatorService,
+    CouponCodeService,
+    SephoraResponseMapper,
   ],
   exports: [
     PromoService,
@@ -45,6 +51,9 @@ import { PrismaService } from 'src/common/services/prismaService';
     CouponManagerService,
     ClaimManagerService,
     PromoEventPublisherService,
+    CouponValidatorService,
+    CouponCodeService,
+    SephoraResponseMapper,
   ],
 })
 export class PromoModule {}

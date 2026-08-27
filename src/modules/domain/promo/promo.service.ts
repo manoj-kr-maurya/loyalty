@@ -17,6 +17,8 @@ import { DiscountEngineService, DiscountResult2 } from './discount-engine.servic
 import { CouponManagerService, CouponAllocation, CouponBlock, CouponClaim } from './coupon-manager.service';
 import { ClaimManagerService, ClaimInput, ClaimRecord, ClaimQuery } from './claim-manager.service';
 import { PromoEventPublisherService } from './promo-event-publisher.service';
+import { CouponValidatorService, CouponValidationInput } from './coupon-validator.service';
+import { SephoraResponseMapper, SephoraPromoResponse } from './sephora-response.mapper';
 
 export interface EvaluatePromotionsInput {
   organizationId: string;
@@ -56,6 +58,8 @@ export class PromoService {
     private readonly couponManager: CouponManagerService,
     private readonly claimManager: ClaimManagerService,
     private readonly promoEvents: PromoEventPublisherService,
+    private readonly couponValidator: CouponValidatorService,
+    private readonly responseMapper: SephoraResponseMapper,
     private readonly prisma: PrismaService,
   ) {}
 
@@ -105,12 +109,17 @@ export class PromoService {
         organizationId,
         name: form.name,
         description: form.description ?? null,
+        couponCode: form.couponCode ?? null,
+        couponValue: form.couponValue ?? null,
+        subTitle: form.subTitle ?? null,
         programType: 'PROMO',
         rewardType: form.rewardType ?? 'DISCOUNT',
         rewardCurrency: form.rewardCurrency ?? 'DEFAULT',
         budgetEnabled: false,
         priority: 0,
         minBankAmount: form.minBankAmount ?? null,
+        minimumCartValue: form.minimumCartValue ?? null,
+        maxDiscountValue: form.maxDiscountValue ?? null,
         businessType: form.businessType ?? [],
         maxClaimsPerUser: form.maxClaimsPerUser ?? null,
         maxClaimsTotal: form.maxClaimsTotal ?? null,
@@ -130,8 +139,13 @@ export class PromoService {
       data: {
         name: form.name,
         description: form.description ?? null,
+        couponCode: form.couponCode ?? null,
+        couponValue: form.couponValue ?? null,
+        subTitle: form.subTitle ?? null,
         rewardType: form.rewardType,
         minBankAmount: form.minBankAmount ?? null,
+        minimumCartValue: form.minimumCartValue ?? null,
+        maxDiscountValue: form.maxDiscountValue ?? null,
         businessType: form.businessType ?? [],
         maxClaimsPerUser: form.maxClaimsPerUser ?? null,
         maxClaimsTotal: form.maxClaimsTotal ?? null,
@@ -450,13 +464,34 @@ export class PromoService {
 
   // ─── Promotion Queries ─────────────────────────────────────────
 
-  /** Get active promotions for an organization. */
-  async getActivePromotions(organizationId: string): Promise<any[]> {
-    return this.prisma.rewardProgram.findMany({
-      where: { organizationId, programType: 'PROMO' },
+  /** Get active promotions for an organization with Sephora-compatible response. */
+  async getActivePromotions(
+    organizationId: string,
+    input?: CouponValidationInput,
+  ): Promise<SephoraPromoResponse> {
+    const page = (input as any)?.page ?? 1;
+    const limit = (input as any)?.limit ?? 50;
+
+    const promos = await this.prisma.rewardProgram.findMany({
+      where: { organizationId, programType: 'PROMO', status: 'ACTIVE', isArchived: false },
       include: { rules: true },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ priority: 'desc' }, { createdAt: 'desc' }],
+      skip: (page - 1) * limit,
+      take: limit,
     });
+
+    const validationInput: CouponValidationInput = {
+      organizationId,
+      customerId: input?.customerId,
+      cartValue: input?.cartValue,
+      cartCategories: input?.cartCategories,
+      isBankOffer: input?.isBankOffer,
+      appliedCouponIds: input?.appliedCouponIds,
+    };
+
+    const validations = await this.couponValidator.validateAll(promos, validationInput);
+
+    return this.responseMapper.mapToResponse(promos, validations, page, limit);
   }
 
   /** Get a single promotion by ID. */

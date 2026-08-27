@@ -75,6 +75,7 @@ model Customer {
   logoUrl           String?
   customerOrgOrders CustomerOrganizationOrder[]
   customerWallet    CustomerWallet[]
+  couponCodes       CouponCode[]
   rewardBlocks      RewardBlock[]
   rewardLedgers     RewardLedger[]
 
@@ -277,7 +278,12 @@ model RewardProgram {
   priority           Int               @default(0)
   business           String?
   category           String?
+  couponCode         String?
+  couponValue        Decimal?          @db.Decimal(12, 2)
+  subTitle           String?
   minBankAmount      Decimal?          @db.Decimal(12, 2)
+  minimumCartValue   Decimal?          @db.Decimal(12, 2)
+  maxDiscountValue   Decimal?          @db.Decimal(12, 2)
   businessType       Json?
   maxClaimsPerUser   Int?
   maxClaimsTotal     Int?
@@ -290,6 +296,7 @@ model RewardProgram {
   version            Int               @default(1)
   isArchived         Boolean           @default(false)
   rules              RewardProgramRule[]
+  couponCodes        CouponCode[]
   rewardBlocks       RewardBlock[]
   rewardLedgers      RewardLedger[]
   budgets            Budget[]
@@ -315,6 +322,27 @@ model RewardProgramRule {
   updatedAt       DateTime         @updatedAt
 
   @@map("rewardProgramRule")
+}
+
+model CouponCode {
+  id            String           @id @default(uuid())
+  code          String           @unique
+  program       RewardProgram    @relation(fields: [programId], references: [id])
+  programId     String
+  customer      Customer?        @relation(fields: [customerId], references: [id])
+  customerId    String?
+  isUserSpecific Boolean         @default(true)
+  status        CouponCodeStatus @default(AVAILABLE)
+  usedCount     Int              @default(0)
+  maxUses       Int              @default(1)
+  allocatedAt   DateTime         @default(now())
+  expiresAt     DateTime?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  @@index([code])
+  @@index([programId, customerId])
+  @@map("couponCode")
 }
 
 model RewardBlock {
@@ -398,6 +426,8 @@ enum RewardType {
   BADGE
   COINS
   CASHBACK_WALLET
+  PERCENTAGE
+  BUNDLE
 }
 
 enum RewardMode {
@@ -420,6 +450,14 @@ enum RewardBlockStatus {
   CONFIRMED
   CANCELLED
   EXPIRED
+}
+
+enum CouponCodeStatus {
+  AVAILABLE
+  BLOCKED
+  CLAIMED
+  EXPIRED
+  REVOKED
 }
 
 enum RewardLedgerStatus {
