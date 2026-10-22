@@ -6,9 +6,15 @@ import {
   Param,
   HttpCode,
   HttpStatus,
+  UseGuards,
 } from '@nestjs/common';
+import { ApiSecurity, ApiTags } from '@nestjs/swagger';
+import { ApiKeyGuard } from 'src/common/guards/api-key.guard';
 import { PromoEngineService } from './promo-engine.service';
 
+@ApiTags('engines-promo')
+@ApiSecurity('x-api-key')
+@UseGuards(ApiKeyGuard)
 @Controller('engines/promo')
 export class PromoEngineController {
   constructor(private readonly promoEngine: PromoEngineService) {}

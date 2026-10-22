@@ -1,7 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { LoyaltyLedgerType } from '@prisma/client';
 import { PrismaService } from 'src/common/services/prismaService';
 import { CommonException } from 'src/common/exceptions/common.exception';
 import { StatusCodes } from 'src/common/enums/status-codes';
+import { EarningCalculatorService } from './services/earning-calculator.service';
+import { IdempotencyService } from './services/idempotency.service';
+import { WalletLedgerService } from './services/wallet-ledger.service';
 
 // ─── Input / Output Types ───────────────────────────────
 
@@ -24,10 +28,12 @@ export interface CreateTiersInput {
 export interface EarnPointsInput {
   customerId: string;
   organizationId: string;
-  amount: number; // base transaction amount
+  amount: number;
   currencyCode: string;
   orderRef?: string;
+  expiryDate?: string | Date;
   metadata?: Record<string, any>;
+  idempotencyKey?: string;
 }
 
 export interface EarnPointsOutput {
@@ -41,6 +47,8 @@ export interface EarnPointsOutput {
   newTier: string | null;
   tierUpgraded: boolean;
   walletBalance: number;
+  ledgerEntryId?: string;
+  expiryDate?: string | null;
 }
 
 export interface BurnPointsInput {
@@ -50,6 +58,7 @@ export interface BurnPointsInput {
   currencyCode: string;
   orderRef?: string;
   metadata?: Record<string, any>;
+  idempotencyKey?: string;
 }
 
 export interface BurnPointsOutput {
@@ -58,6 +67,28 @@ export interface BurnPointsOutput {
   pointsBurned: number;
   remainingBalance: number;
   currentTier: string | null;
+  ledgerEntryId?: string;
+}
+
+export interface EstimatePointsInput {
+  customerId: string;
+  organizationId: string;
+  amount: number;
+  currencyCode?: string;
+}
+
+export interface EstimatePointsOutput {
+  customerId: string;
+  organizationId: string;
+  baseAmount: number;
+  pointsEarned: number;
+  tierMultiplier: number;
+  effectiveRate: number;
+  currentTier: string | null;
+  projectedTier: string;
+  tierUpgraded: boolean;
+  currentPoints: number;
+  lifetimePoints: number;
 }
 
 export interface ExpirePointsInput {
@@ -77,37 +108,43 @@ export interface LoyaltyStatementInput {
 export class LoyaltyEngineService {
   private readonly logger = new Logger(LoyaltyEngineService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly calculator: EarningCalculatorService,
+    private readonly idempotency: IdempotencyService,
+    private readonly walletLedger: WalletLedgerService,
+  ) {}
 
   // ─── Tier Management ──────────────────────────────────
 
-  /**
-   * Create or update loyalty tiers for an organization.
-   */
   async upsertTiers(input: CreateTiersInput): Promise<{
     organizationId: string;
     tiers: TierDefinition[];
   }> {
     const { organizationId, tiers } = input;
 
-    // Validate tier levels are sequential and non-overlapping
     const sorted = [...tiers].sort((a, b) => a.level - b.level);
     for (let i = 0; i < sorted.length; i++) {
       if (sorted[i].level !== i + 1) {
         throw new CommonException(
-          `Tier levels must be sequential starting from 1. Found level ${sorted[i].level} at position ${i + 1}`,
+          `Tier levels must be sequential starting from 1. Found level ${
+            sorted[i].level
+          } at position ${i + 1}`,
           StatusCodes.BAD_REQUEST,
         );
       }
       if (i > 0 && sorted[i].minPoints <= sorted[i - 1].minPoints) {
         throw new CommonException(
-          `Tier "${sorted[i].name}" minPoints (${sorted[i].minPoints}) must be greater than previous tier "${sorted[i - 1].name}" minPoints (${sorted[i - 1].minPoints})`,
+          `Tier "${sorted[i].name}" minPoints (${
+            sorted[i].minPoints
+          }) must be greater than previous tier "${
+            sorted[i - 1].name
+          }" minPoints (${sorted[i - 1].minPoints})`,
           StatusCodes.BAD_REQUEST,
         );
       }
     }
 
-    // Upsert each tier
     const results: TierDefinition[] = [];
     for (const tier of tiers) {
       const upserted = await this.prisma.loyaltyTier.upsert({
@@ -147,13 +184,12 @@ export class LoyaltyEngineService {
       });
     }
 
-    this.logger.log(`Tiers created/updated for org ${organizationId}: ${tiers.length} tiers`);
+    this.logger.log(
+      `Tiers created/updated for org ${organizationId}: ${tiers.length} tiers`,
+    );
     return { organizationId, tiers: results };
   }
 
-  /**
-   * Get all tiers for an organization.
-   */
   async getTiers(organizationId: string): Promise<TierDefinition[]> {
     const tiers = await this.prisma.loyaltyTier.findMany({
       where: { organizationId, isActive: true },
@@ -174,184 +210,270 @@ export class LoyaltyEngineService {
 
   // ─── Earn Points ──────────────────────────────────────
 
-  /**
-   * Earn loyalty points for a customer transaction.
-   * Applies tier multiplier and handles tier upgrade/downgrade.
-   */
   async earnPoints(input: EarnPointsInput): Promise<EarnPointsOutput> {
-    const { customerId, organizationId, amount, currencyCode, orderRef, metadata } = input;
+    const {
+      customerId,
+      organizationId,
+      amount,
+      currencyCode,
+      orderRef,
+      metadata,
+      idempotencyKey,
+    } = input;
 
     if (amount <= 0) {
-      throw new CommonException('Amount must be greater than zero', StatusCodes.BAD_REQUEST);
+      throw new CommonException(
+        'Amount must be greater than zero',
+        StatusCodes.BAD_REQUEST,
+      );
     }
 
-    // Get customer's current tier
-    const customerTier = await this.prisma.customerTier.findUnique({
-      where: { customerId_organizationId: { customerId, organizationId } },
-      include: { tier: true },
-    });
+    const expiryDate = this.parseOptionalDate(input.expiryDate);
 
-    // Get all tiers for the org
+    return this.idempotency.execute<EarnPointsOutput>({
+      key: idempotencyKey,
+      operation: 'earn',
+      organizationId,
+      customerId,
+      request: {
+        customerId,
+        organizationId,
+        amount,
+        currencyCode,
+        orderRef,
+        expiryDate: expiryDate?.toISOString(),
+        metadata,
+      },
+      work: async (tx) => {
+        const tiers = await tx.loyaltyTier.findMany({
+          where: { organizationId, isActive: true },
+          orderBy: { level: 'asc' },
+        });
+
+        if (tiers.length === 0) {
+          throw new CommonException(
+            `No loyalty tiers configured for organization ${organizationId}`,
+            StatusCodes.NOT_FOUND,
+          );
+        }
+
+        const customerTier = await tx.customerTier.findUnique({
+          where: { customerId_organizationId: { customerId, organizationId } },
+          include: { tier: true },
+        });
+
+        const calculation = this.calculator.calculate({
+          amount,
+          tiers,
+          currentTier: customerTier?.tier ?? null,
+          currentPoints: customerTier?.currentPoints ?? 0,
+          lifetimePoints: customerTier?.lifetimePoints ?? 0,
+        });
+
+        await tx.customerTier.upsert({
+          where: {
+            customerId_organizationId: { customerId, organizationId },
+          },
+          create: {
+            customerId,
+            organizationId,
+            tierId: calculation.projectedTier.id,
+            currentPoints: calculation.newCurrentPoints,
+            lifetimePoints: calculation.newLifetimePoints,
+            upgradedAt: calculation.tierUpgraded ? new Date() : null,
+          },
+          update: {
+            tierId: calculation.projectedTier.id,
+            currentPoints: calculation.newCurrentPoints,
+            lifetimePoints: calculation.newLifetimePoints,
+            ...(calculation.tierUpgraded && { upgradedAt: new Date() }),
+          },
+        });
+
+        let walletBalance = 0;
+        let ledgerEntryId: string | undefined;
+
+        if (calculation.pointsEarned > 0) {
+          const credit = await this.walletLedger.credit(tx, {
+            customerId,
+            organizationId,
+            currencyCode,
+            points: calculation.pointsEarned,
+            type: LoyaltyLedgerType.EARN,
+            expiryDate: expiryDate ?? null,
+            referenceType: 'EARN',
+            referenceId: orderRef,
+            transactionRef: orderRef,
+            idempotencyKey,
+            metadata,
+          });
+          walletBalance = credit.walletBalance;
+          ledgerEntryId = credit.ledgerEntryId;
+        } else {
+          const wallet = await tx.customerWallet.findUnique({
+            where: {
+              customer_id_currency_code: { customerId, currencyCode },
+            },
+          });
+          walletBalance = wallet?.availableBalance ?? 0;
+        }
+
+        this.logger.log(
+          `Earn: customer=${customerId} org=${organizationId} amount=${amount} points=${calculation.pointsEarned} tier=${calculation.projectedTier.name}`,
+        );
+
+        return {
+          customerId,
+          organizationId,
+          baseAmount: amount,
+          pointsEarned: calculation.pointsEarned,
+          tierMultiplier: calculation.tierMultiplier,
+          effectiveRate: calculation.effectiveRate,
+          currentTier: calculation.currentTier.name,
+          newTier: calculation.tierUpgraded
+            ? calculation.projectedTier.name
+            : null,
+          tierUpgraded: calculation.tierUpgraded,
+          walletBalance,
+          ledgerEntryId,
+          expiryDate: expiryDate?.toISOString() ?? null,
+        };
+      },
+    });
+  }
+
+  // ─── Burn Points ──────────────────────────────────────
+
+  async burnPoints(input: BurnPointsInput): Promise<BurnPointsOutput> {
+    const {
+      customerId,
+      organizationId,
+      points,
+      currencyCode,
+      orderRef,
+      metadata,
+      idempotencyKey,
+    } = input;
+
+    if (points <= 0) {
+      throw new CommonException(
+        'Points must be greater than zero',
+        StatusCodes.BAD_REQUEST,
+      );
+    }
+
+    return this.idempotency.execute<BurnPointsOutput>({
+      key: idempotencyKey,
+      operation: 'burn',
+      organizationId,
+      customerId,
+      request: {
+        customerId,
+        organizationId,
+        points,
+        currencyCode,
+        orderRef,
+        metadata,
+      },
+      work: async (tx) => {
+        const debit = await this.walletLedger.debitFifo(tx, {
+          customerId,
+          organizationId,
+          currencyCode,
+          points,
+          type: LoyaltyLedgerType.BURN,
+          referenceType: 'BURN',
+          referenceId: orderRef,
+          transactionRef: orderRef,
+          idempotencyKey,
+          metadata,
+        });
+
+        const customerTier = await tx.customerTier.findUnique({
+          where: {
+            customerId_organizationId: { customerId, organizationId },
+          },
+          include: { tier: true },
+        });
+
+        this.logger.log(
+          `Burn: customer=${customerId} org=${organizationId} points=${points} remaining=${debit.walletBalance}`,
+        );
+
+        return {
+          customerId,
+          organizationId,
+          pointsBurned: points,
+          remainingBalance: debit.walletBalance,
+          currentTier: customerTier?.tier?.name ?? null,
+          ledgerEntryId: debit.ledgerEntryId,
+        };
+      },
+    });
+  }
+
+  // ─── Estimate Points ──────────────────────────────────
+
+  async estimatePoints(
+    input: EstimatePointsInput,
+  ): Promise<EstimatePointsOutput> {
+    const { customerId, organizationId, amount } = input;
+
     const tiers = await this.prisma.loyaltyTier.findMany({
       where: { organizationId, isActive: true },
       orderBy: { level: 'asc' },
     });
 
-    if (tiers.length === 0) {
-      throw new CommonException(
-        `No loyalty tiers configured for organization ${organizationId}`,
-        StatusCodes.NOT_FOUND,
-      );
-    }
-
-    // Determine tier multiplier
-    const currentTier = customerTier?.tier || tiers[0]; // default to lowest tier
-    const tierMultiplier = Number(currentTier.multiplier);
-
-    // Calculate points: amount × tier multiplier
-    const pointsEarned = Math.floor(amount * tierMultiplier);
-
-    // Update customer tier points
-    const newTotalPoints = (customerTier?.currentPoints || 0) + pointsEarned;
-    const newLifetimePoints = (customerTier?.lifetimePoints || 0) + pointsEarned;
-
-    // Check for tier upgrade
-    let newTierName: string | null = null;
-    let tierUpgraded = false;
-    const nextTier = tiers.find((t) => t.level === currentTier.level + 1);
-
-    if (nextTier && newTotalPoints >= nextTier.minPoints) {
-      newTierName = nextTier.name;
-      tierUpgraded = true;
-    }
-
-    // Upsert customer tier
-    await this.prisma.customerTier.upsert({
-      where: { customerId_organizationId: { customerId, organizationId } },
-      create: {
-        customerId,
-        organizationId,
-        tierId: tierUpgraded ? nextTier!.id : currentTier.id,
-        currentPoints: newTotalPoints,
-        lifetimePoints: newLifetimePoints,
-        upgradedAt: tierUpgraded ? new Date() : null,
-      },
-      update: {
-        tierId: tierUpgraded ? nextTier!.id : currentTier.id,
-        currentPoints: newTotalPoints,
-        lifetimePoints: newLifetimePoints,
-        upgradedAt: tierUpgraded ? new Date() : undefined,
-      },
-    });
-
-    // Credit wallet
-    const wallet = await this.prisma.customerWallet.upsert({
-      where: {
-        customer_id_currency_code: { customerId, currencyCode },
-      },
-      create: {
-        customerId,
-        currencyCode,
-        availableBalance: pointsEarned,
-      },
-      update: {
-        availableBalance: { increment: pointsEarned },
-      },
-    });
-
-    this.logger.log(
-      `Earn: customer=${customerId} org=${organizationId} amount=${amount} points=${pointsEarned} tier=${newTierName || currentTier.name}`,
-    );
-
-    return {
-      customerId,
-      organizationId,
-      baseAmount: amount,
-      pointsEarned,
-      tierMultiplier,
-      effectiveRate: tierMultiplier,
-      currentTier: currentTier.name,
-      newTier: newTierName,
-      tierUpgraded,
-      walletBalance: wallet.availableBalance,
-    };
-  }
-
-  // ─── Burn Points ──────────────────────────────────────
-
-  /**
-   * Burn (redeem) points for a customer.
-   * Uses FIFO — oldest points consumed first.
-   */
-  async burnPoints(input: BurnPointsInput): Promise<BurnPointsOutput> {
-    const { customerId, organizationId, points, currencyCode, orderRef, metadata } = input;
-
-    if (points <= 0) {
-      throw new CommonException('Points must be greater than zero', StatusCodes.BAD_REQUEST);
-    }
-
-    const wallet = await this.prisma.customerWallet.findUnique({
-      where: {
-        customer_id_currency_code: { customerId, currencyCode },
-      },
-    });
-
-    if (!wallet) {
-      throw new CommonException('Wallet not found', StatusCodes.NOT_FOUND);
-    }
-
-    if (wallet.availableBalance < points) {
-      throw new CommonException(
-        `Insufficient balance. Available: ${wallet.availableBalance}, Requested: ${points}`,
-        StatusCodes.BAD_REQUEST,
-      );
-    }
-
-    // Deduct from available balance
-    const updatedWallet = await this.prisma.customerWallet.update({
-      where: {
-        customer_id_currency_code: { customerId, currencyCode },
-      },
-      data: {
-        availableBalance: { decrement: points },
-        usedBalance: { increment: points },
-      },
-    });
-
-    // Get current tier
     const customerTier = await this.prisma.customerTier.findUnique({
       where: { customerId_organizationId: { customerId, organizationId } },
       include: { tier: true },
     });
 
-    this.logger.log(
-      `Burn: customer ${customerId} org=${organizationId} points=${points} remaining=${updatedWallet.availableBalance}`,
-    );
+    const calculation = this.calculator.calculate({
+      amount,
+      tiers,
+      currentTier: customerTier?.tier ?? null,
+      currentPoints: customerTier?.currentPoints ?? 0,
+      lifetimePoints: customerTier?.lifetimePoints ?? 0,
+    });
 
     return {
       customerId,
       organizationId,
-      pointsBurned: points,
-      remainingBalance: updatedWallet.availableBalance,
-      currentTier: customerTier?.tier?.name || null,
+      baseAmount: amount,
+      pointsEarned: calculation.pointsEarned,
+      tierMultiplier: calculation.tierMultiplier,
+      effectiveRate: calculation.effectiveRate,
+      currentTier: calculation.currentTier.name,
+      projectedTier: calculation.projectedTier.name,
+      tierUpgraded: calculation.tierUpgraded,
+      currentPoints: calculation.newCurrentPoints,
+      lifetimePoints: calculation.newLifetimePoints,
     };
   }
 
   // ─── Expire Points ────────────────────────────────────
 
-  /**
-   * Expire points that have passed their expiry date.
-   * Moves points from available → expired balance.
-   */
   async expirePoints(input: ExpirePointsInput): Promise<{
     organizationId: string;
     currencyCode: string;
     expiredCount: number;
     totalExpiredPoints: number;
   }> {
-    const { organizationId, currencyCode, expiryDate } = input;
+    const { organizationId, currencyCode } = input;
 
-    // Find all wallets with this currency that have pending/available points past expiry
+    const currency = await this.prisma.currency.findUnique({
+      where: { code: currencyCode },
+      select: { organizationId: true },
+    });
+
+    if (!currency || currency.organizationId !== organizationId) {
+      throw new CommonException(
+        `Currency ${currencyCode} does not belong to organization ${organizationId}`,
+        StatusCodes.BAD_REQUEST,
+      );
+    }
+
     const wallets = await this.prisma.customerWallet.findMany({
       where: {
         currencyCode,
@@ -363,9 +485,7 @@ export class LoyaltyEngineService {
     let totalExpiredPoints = 0;
 
     for (const wallet of wallets) {
-      // In a real implementation, you'd check pocket-level expiry dates
-      // For now, expire a configurable percentage of available balance
-      const expireAmount = Math.floor(wallet.availableBalance * 0.1); // 10% expiry
+      const expireAmount = Math.floor(wallet.availableBalance * 0.1);
 
       if (expireAmount > 0) {
         await this.prisma.customerWallet.update({
@@ -384,14 +504,16 @@ export class LoyaltyEngineService {
       `Expiry: org=${organizationId} currency=${currencyCode} wallets=${expiredCount} points=${totalExpiredPoints}`,
     );
 
-    return { organizationId, currencyCode, expiredCount, totalExpiredPoints };
+    return {
+      organizationId,
+      currencyCode,
+      expiredCount,
+      totalExpiredPoints,
+    };
   }
 
   // ─── Loyalty Statement ────────────────────────────────
 
-  /**
-   * Generate a loyalty statement for a customer.
-   */
   async generateStatement(input: LoyaltyStatementInput): Promise<{
     customerId: string;
     organizationId: string;
@@ -407,18 +529,15 @@ export class LoyaltyEngineService {
   }> {
     const { customerId, organizationId, periodStart, periodEnd } = input;
 
-    // Get wallet
     const wallet = await this.prisma.customerWallet.findFirst({
       where: { customerId },
     });
 
-    // Get customer tier
     const customerTier = await this.prisma.customerTier.findUnique({
       where: { customerId_organizationId: { customerId, organizationId } },
       include: { tier: true },
     });
 
-    // Check for existing statement
     const existing = await this.prisma.loyaltyStatement.findFirst({
       where: {
         customerId,
@@ -444,14 +563,14 @@ export class LoyaltyEngineService {
       };
     }
 
-    // Calculate statement values
-    const openingBalance = wallet ? wallet.availableBalance + wallet.usedBalance : 0;
-    const earnedPoints = 0; // Would query from transaction history
+    const openingBalance = wallet
+      ? wallet.availableBalance + wallet.usedBalance
+      : 0;
+    const earnedPoints = 0;
     const redeemedPoints = wallet?.usedBalance || 0;
     const expiredPoints = wallet?.expiredBalance || 0;
     const closingBalance = wallet?.availableBalance || 0;
 
-    // Persist statement
     const statement = await this.prisma.loyaltyStatement.create({
       data: {
         customerId,
@@ -485,10 +604,10 @@ export class LoyaltyEngineService {
 
   // ─── Tier Status ──────────────────────────────────────
 
-  /**
-   * Get a customer's current tier status.
-   */
-  async getCustomerTier(customerId: string, organizationId: string): Promise<{
+  async getCustomerTier(
+    customerId: string,
+    organizationId: string,
+  ): Promise<{
     customerId: string;
     organizationId: string;
     currentTier: string | null;
@@ -516,7 +635,6 @@ export class LoyaltyEngineService {
       };
     }
 
-    // Find next tier
     const nextTier = await this.prisma.loyaltyTier.findFirst({
       where: {
         organizationId,
@@ -526,7 +644,7 @@ export class LoyaltyEngineService {
     });
 
     const pointsToNextTier = nextTier
-      ? Math.max(0, nextTier.minPoints - customerTier.currentPoints)
+      ? Math.max(0, nextTier.minPoints - customerTier.lifetimePoints)
       : null;
 
     return {
@@ -539,5 +657,14 @@ export class LoyaltyEngineService {
       nextTier: nextTier?.name || null,
       pointsToNextTier,
     };
+  }
+
+  private parseOptionalDate(value?: string | Date): Date | undefined {
+    if (!value) return undefined;
+    const parsed = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+      throw new CommonException('Invalid expiryDate', StatusCodes.BAD_REQUEST);
+    }
+    return parsed;
   }
 }

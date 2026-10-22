@@ -7,9 +7,15 @@ import {
   Param,
   HttpCode,
   HttpStatus,
+  UseGuards,
 } from '@nestjs/common';
+import { ApiSecurity, ApiTags } from '@nestjs/swagger';
+import { ApiKeyGuard } from 'src/common/guards/api-key.guard';
 import { FXEngineService } from './fx-engine.service';
 
+@ApiTags('engines-fx')
+@ApiSecurity('x-api-key')
+@UseGuards(ApiKeyGuard)
 @Controller('engines/fx')
 export class FXEngineController {
   constructor(private readonly fxEngine: FXEngineService) {}

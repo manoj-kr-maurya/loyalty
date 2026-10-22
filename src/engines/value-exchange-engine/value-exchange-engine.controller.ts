@@ -6,9 +6,15 @@ import {
   Param,
   HttpCode,
   HttpStatus,
+  UseGuards,
 } from '@nestjs/common';
+import { ApiSecurity, ApiTags } from '@nestjs/swagger';
+import { ApiKeyGuard } from 'src/common/guards/api-key.guard';
 import { ValueExchangeEngineService } from './value-exchange-engine.service';
 
+@ApiTags('engines-value-exchange')
+@ApiSecurity('x-api-key')
+@UseGuards(ApiKeyGuard)
 @Controller('engines/value-exchange')
 export class ValueExchangeEngineController {
   constructor(private readonly valueExchange: ValueExchangeEngineService) {}

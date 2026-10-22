@@ -799,6 +799,70 @@ model LoyaltyStatement {
   @@map("loyaltyStatement")
 }
 
+// ─── Loyalty Ledger & Idempotency ───────────────────────
+
+enum LoyaltyLedgerType {
+  EARN
+  BURN
+  EXPIRE
+  TRANSFER_IN
+  TRANSFER_OUT
+  ADJUSTMENT
+  OPENING
+  REVERSAL
+}
+
+model LoyaltyLedgerEntry {
+  id             String            @id @default(uuid())
+  customerId     String
+  organizationId String
+  currencyCode   String
+  type           LoyaltyLedgerType
+  points         Int
+  balanceAfter   Int
+  referenceType  String?
+  referenceId    String?
+  idempotencyKey String?
+  metadata       Json?
+  createdAt      DateTime          @default(now())
+
+  @@index([customerId, organizationId, createdAt])
+  @@index([customerId, currencyCode, type, createdAt])
+  @@index([referenceType, referenceId])
+  @@map("loyaltyLedgerEntry")
+}
+
+model LoyaltyIdempotency {
+  id             String   @id @default(uuid())
+  key            String
+  operation      String
+  organizationId String
+  customerId     String?
+  requestHash    String
+  status         String
+  response       Json?
+  resourceId     String?
+  createdAt      DateTime @default(now())
+  expiresAt      DateTime
+
+  @@unique([organizationId, operation, key])
+  @@index([expiresAt])
+  @@map("loyaltyIdempotency")
+}
+
+model LoyaltyOutboxEvent {
+  id             String    @id @default(uuid())
+  organizationId String
+  eventType      String
+  aggregateId    String
+  payload        Json
+  createdAt      DateTime  @default(now())
+  publishedAt    DateTime?
+
+  @@index([publishedAt, createdAt])
+  @@map("loyaltyOutboxEvent")
+}
+
 // ─── Promo / Discount Engine ────────────────────────────
 
 model PromoCode {

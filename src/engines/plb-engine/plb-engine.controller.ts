@@ -6,9 +6,15 @@ import {
   Param,
   HttpCode,
   HttpStatus,
+  UseGuards,
 } from '@nestjs/common';
+import { ApiSecurity, ApiTags } from '@nestjs/swagger';
+import { ApiKeyGuard } from 'src/common/guards/api-key.guard';
 import { PLBEngineService } from './plb-engine.service';
 
+@ApiTags('engines-plb')
+@ApiSecurity('x-api-key')
+@UseGuards(ApiKeyGuard)
 @Controller('engines/plb')
 export class PLBEngineController {
   constructor(private readonly plbEngine: PLBEngineService) {}
