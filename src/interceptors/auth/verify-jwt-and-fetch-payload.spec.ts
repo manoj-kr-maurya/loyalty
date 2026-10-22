@@ -1,7 +1,7 @@
 import { ExecutionContext, CallHandler } from '@nestjs/common';
 import { HttpException, HttpStatus } from '@nestjs/common';
 import { VerifyJWTAndFetchPayload } from './verify-jwt-and-fetch-payload';
-import { AuthService } from 'src/modules/domain/auth/auth.service';
+import { AuthService } from 'src/modules/auth/auth.service';
 import { of } from 'rxjs';
 
 describe('VerifyJWTAndFetchPayload', () => {

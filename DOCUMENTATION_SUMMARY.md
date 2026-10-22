@@ -86,9 +86,9 @@ Comprehensive documentation created for the JAS Loyalty Engine Microservice proj
 
 ### 🔌 Core Module Documentation (4 Core Modules)
 
-#### `/src/modules/core/agenda/README.md`
-- **Purpose**: Async job scheduling (Agenda + MongoDB)
-- **Current Features**: Job scheduling, persistence, recurring schedules
+#### `/src/modules/jobs/README.md`
+- **Purpose**: Async job scheduling via pg-boss on PostgreSQL (`pgboss` schema)
+- **Current Features**: Job scheduling, persistence, retry, recurring schedules
 - **Job Types**: Campaign expiry, wallet expiry, order processing, notifications, reports
 - **Future Goals**: Cron scheduling, monitoring dashboard, dead letter queue
 - **Lines**: ~250
@@ -109,7 +109,7 @@ Comprehensive documentation created for the JAS Loyalty Engine Microservice proj
 
 #### `/src/modules/health/README.md`
 - **Purpose**: Application health monitoring
-- **Checks**: PostgreSQL, Redis, MongoDB, Memory, Disk
+- **Checks**: PostgreSQL, Redis, Memory, Disk
 - **Endpoints**: /health, /health/live (K8s liveness), /health/ready (K8s readiness)
 - **Future Goals**: Custom indicators, alerting, Prometheus metrics, Grafana
 - **Lines**: ~220
@@ -268,7 +268,7 @@ Each module README follows consistent structure:
 - [x] Organization module
 - [x] Organization-Order module
 - [x] Shop module
-- [x] Agenda (core)
+- [x] JobScheduler (modules/jobs, pg-boss)
 - [x] Health (core)
 - [x] HTTP (core)
 - [x] Listener (core)

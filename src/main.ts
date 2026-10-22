@@ -3,9 +3,9 @@ import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
-import { envEnums, Environments } from './config/enums';
-import { ServerSettingsEnvVariables } from './config/types';
-import { PrismaClientExceptionFilter } from './common/exceptions/prisma/prisma-client-exception.filter';
+import { envEnums, Environments } from 'src/config/enums';
+import { ServerSettingsEnvVariables } from 'src/config/types';
+import { PrismaClientExceptionFilter } from 'src/common/exceptions/prisma/prisma-client-exception.filter';
 import * as bodyParser from 'body-parser';
 
 async function bootstrap() {

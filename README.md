@@ -8,7 +8,7 @@ A comprehensive loyalty program management backend service built with NestJS, of
 - **Database**: PostgreSQL (with Prisma ORM)
 - **Caching**: Redis
 - **Message Queue**: RabbitMQ
-- **Job Scheduling**: Agenda (MongoDB-backed)
+- **Job Scheduling**: pg-boss (PostgreSQL-backed)
 - **Monitoring & Observability**:
   - Prometheus
   - Grafana + Loki
@@ -62,7 +62,6 @@ The system manages several key entities:
 - Docker & Docker Compose
 - PostgreSQL
 - Redis
-- MongoDB (for Agenda)
 - RabbitMQ
 
 ### Environment Variables (Required)
@@ -70,7 +69,6 @@ The system manages several key entities:
 ```
 # Database
 LSB_PG_URL=
-AGENDA_MONGO_DB_URI=
 
 # Server
 PORT=
@@ -171,13 +169,7 @@ COMMA_SEPARATED_TESTING_PHONE_NUMBERS=
    - Persistent volume
    - Health check: Every 5s
 
-5. **MongoDB** (for Agenda)
-
-   - Latest version
-   - Dedicated to agenda job scheduling
-   - Health check: Every 5s
-
-6. **Prometheus**
+5. **Prometheus**
    - Latest version
    - Custom configuration mounted
    - Remote write receiver enabled
@@ -192,7 +184,6 @@ COMMA_SEPARATED_TESTING_PHONE_NUMBERS=
 
 - postgres_volume: PostgreSQL data
 - redis_volume: Redis data
-- mongodb_volume: MongoDB data
 - prometheus_volume: Prometheus data
 
 ## Monitoring & Observability
@@ -221,3 +212,14 @@ COMMA_SEPARATED_TESTING_PHONE_NUMBERS=
 - Logical replication for PostgreSQL
 - WAL (Write-Ahead Log) archiving
 - Monitoring scripts for replication status
+**. Never make a change silently — always link the fix/feature to a concept and give a resource.
+
+## 🎓 Learning Requirement
+
+When fixing, implementing, or changing anything, the AI assistant MUST include three sections:
+1. **Concept** — the underlying idea/principle.
+2. **Implementation Principle / Pattern applied** — name the SOLID principle, GoF design pattern, or architecture pattern used, and where in the code (file:line).
+3. **Resource** — official docs/article for learning.
+
+Every change is a learning opportunity; never change silently.
+

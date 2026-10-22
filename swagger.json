@@ -1,0 +1,3922 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/": {
+      "get": {
+        "operationId": "AppController_serviceCheck",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/restart": {
+      "get": {
+        "operationId": "AppController_restartServer",
+        "parameters": [
+          {
+            "name": "lsb-crash-token",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/metrics": {
+      "get": {
+        "operationId": "PrometheusController_index",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "HealthCheckController_check",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The Health Check is successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "ok"
+                    },
+                    "info": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "object",
+                      "example": {},
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "details": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The Health Check is not successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "error"
+                    },
+                    "info": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "object",
+                      "example": {
+                        "redis": {
+                          "status": "down",
+                          "message": "Could not connect"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "details": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        },
+                        "redis": {
+                          "status": "down",
+                          "message": "Could not connect"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/health/readiness": {
+      "get": {
+        "operationId": "HealthCheckController_checkReadiness",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The Health Check is successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "ok"
+                    },
+                    "info": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "object",
+                      "example": {},
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "details": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The Health Check is not successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "error"
+                    },
+                    "info": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "object",
+                      "example": {
+                        "redis": {
+                          "status": "down",
+                          "message": "Could not connect"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "details": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        },
+                        "redis": {
+                          "status": "down",
+                          "message": "Could not connect"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/health/liveness": {
+      "get": {
+        "operationId": "HealthCheckController_checkLiveness",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The Health Check is successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "ok"
+                    },
+                    "info": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "object",
+                      "example": {},
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "details": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The Health Check is not successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "error"
+                    },
+                    "info": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "object",
+                      "example": {
+                        "redis": {
+                          "status": "down",
+                          "message": "Could not connect"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "details": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        },
+                        "redis": {
+                          "status": "down",
+                          "message": "Could not connect"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/campaign/create-organization-level-campaign": {
+      "post": {
+        "operationId": "CampaignController_create_organization_level_campaign",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Campaign"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/campaign/get-organization-level-campaigns": {
+      "get": {
+        "operationId": "CampaignController_get_organization_level_campaigns",
+        "parameters": [
+          {
+            "name": "organizationId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Campaign"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/campaign/get-organization-level-campaign/{id}": {
+      "get": {
+        "operationId": "CampaignController_get_organization_level_campaign",
+        "parameters": [
+          {
+            "name": "organizationId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Campaign"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/campaign/update-organization-level-campaign": {
+      "post": {
+        "operationId": "CampaignController_update_organization_level_campaign",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Campaign"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/campaign/get-active-campaigns-potential-earning": {
+      "post": {
+        "operationId": "CampaignController_getActiveCampaignOfOrganizationAndTheirPotentialEarning",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Campaign"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/mail-and-sms/get-in-touch": {
+      "post": {
+        "operationId": "MailAndSmsController_getInTouch",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GetInTouch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Mail and SMS"
+        ]
+      }
+    },
+    "/organization/otp/phone": {
+      "post": {
+        "operationId": "OrganizationController_findOrCreateOrganizationAndProceedOTPAuthentication",
+        "summary": "Send OTP for phone authentication",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginOrganizationOtpForm"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OTP sent successfully."
+          }
+        },
+        "tags": [
+          "Organization"
+        ]
+      }
+    },
+    "/organization/otp/validate": {
+      "post": {
+        "operationId": "OrganizationController_validateOtpAndGenerateToken",
+        "summary": "Validate OTP and generate token",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ValidateOrganizationOtpForm"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OTP validated and token generated."
+          }
+        },
+        "tags": [
+          "Organization"
+        ]
+      }
+    },
+    "/organization/send-interest": {
+      "post": {
+        "operationId": "OrganizationController_sendInterest",
+        "summary": "Send interest",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Interest sent successfully."
+          }
+        },
+        "tags": [
+          "Organization"
+        ]
+      }
+    },
+    "/organization/get-your-admin": {
+      "get": {
+        "operationId": "OrganizationController_getYourAdmin",
+        "summary": "Get your admin details",
+        "parameters": [
+          {
+            "name": "organizationId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "orgAdminId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Admin details fetched successfully."
+          }
+        },
+        "tags": [
+          "Organization"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/organization": {
+      "get": {
+        "operationId": "OrganizationController_getOrganization",
+        "summary": "Get organization details",
+        "parameters": [
+          {
+            "name": "organizationId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Organization details fetched successfully."
+          }
+        },
+        "tags": [
+          "Organization"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/organization/logout": {
+      "post": {
+        "operationId": "OrganizationController_logoutOrganization",
+        "summary": "Logout organization",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Organization logged out successfully."
+          }
+        },
+        "tags": [
+          "Organization"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/organization/update": {
+      "post": {
+        "operationId": "OrganizationController_updateOrganization",
+        "summary": "Update organization details",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateOrganizationForm"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Organization updated successfully."
+          }
+        },
+        "tags": [
+          "Organization"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/organization/invite-shop": {
+      "post": {
+        "operationId": "OrganizationController_inviteShop",
+        "summary": "Invite a shop",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InviteShopForm"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Shop invited successfully."
+          }
+        },
+        "tags": [
+          "Organization"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/organization/invited-shops": {
+      "get": {
+        "operationId": "OrganizationController_getInvitedShops",
+        "summary": "Get invited shops",
+        "parameters": [
+          {
+            "name": "organizationId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Invited shops fetched successfully."
+          }
+        },
+        "tags": [
+          "Organization"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/organization/leader-board/top-organizations": {
+      "get": {
+        "operationId": "OrganizationController_getTopOrganizationsForLeaderBoard",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 10,
+              "type": "number"
+            }
+          },
+          {
+            "name": "search",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Organization"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/organization/leader-board/organization/detail/{orgAdminId}": {
+      "get": {
+        "operationId": "OrganizationController_getTopOrganizationDetailForLeaderBoard",
+        "parameters": [
+          {
+            "name": "organizationId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "orgAdminId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Organization"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/organization/order": {
+      "post": {
+        "operationId": "OrganizationOrderController_create",
+        "summary": "Create an order for an organization",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "The order has been successfully created."
+          }
+        },
+        "tags": [
+          "Organization-Orders"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      },
+      "get": {
+        "operationId": "OrganizationOrderController_getOrders",
+        "summary": "Get orders for an organization",
+        "parameters": [
+          {
+            "name": "organizationId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 10,
+              "type": "number"
+            }
+          },
+          {
+            "name": "search",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of orders retrieved successfully."
+          }
+        },
+        "tags": [
+          "Organization-Orders"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/organization/order/{orderId}": {
+      "get": {
+        "operationId": "OrganizationOrderController_getOrderById",
+        "summary": "Get a specific order for an organization",
+        "parameters": [
+          {
+            "name": "organizationId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "orderId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Order retrieved successfully."
+          }
+        },
+        "tags": [
+          "Organization-Orders"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      },
+      "put": {
+        "operationId": "OrganizationOrderController_update",
+        "summary": "Update a specific order for an organization",
+        "parameters": [
+          {
+            "name": "orderId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Order updated successfully."
+          }
+        },
+        "tags": [
+          "Organization-Orders"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/currency/create": {
+      "post": {
+        "operationId": "CurrencyController_createCurrency",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Currency"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/currency/create-organization-currency-bucket": {
+      "post": {
+        "operationId": "CurrencyController_createOrganizationCurrencyBucket",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Currency"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/currency/get-organization-currency-buckets": {
+      "get": {
+        "operationId": "CurrencyController_getOrganizationCurrencyBuckets",
+        "parameters": [
+          {
+            "name": "organizationId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Currency"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/currency/add-balance-to-organization-currency-bucket": {
+      "post": {
+        "operationId": "CurrencyController_addBalanceToOrganizationCurrencyBucket",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Currency"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/currency/update-organization-currency-bucket": {
+      "post": {
+        "operationId": "CurrencyController_enableAutoTopupForOrganizationCurrencyBucket",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Currency"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/currency/search/non-organization/{substring}": {
+      "get": {
+        "operationId": "CurrencyController_searchCurrencies",
+        "parameters": [
+          {
+            "name": "substring",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "organizationId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Currency"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/currency/org-data-needed-by-customer": {
+      "post": {
+        "operationId": "CurrencyController_getOrganizationCurrencies",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Currency"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/currency/filter-organization-created-currencies": {
+      "post": {
+        "operationId": "CurrencyController_filterOrgCreatedCurrencies",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Currency"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/customer": {
+      "get": {
+        "operationId": "CustomerController_getCustomer",
+        "parameters": [
+          {
+            "name": "customerId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Customer"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/customer/{customerId}": {
+      "get": {
+        "operationId": "CustomerController_getCustomerWithId",
+        "parameters": [
+          {
+            "name": "customerId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Customer"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/customer/otp/phone": {
+      "post": {
+        "operationId": "CustomerController_findOrCreateCustomersAndProceedOTPAuthentication",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Customer"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/customer/otp/validate": {
+      "post": {
+        "operationId": "CustomerController_validateOtpAndGenerateToken",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Customer"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/customer/logout": {
+      "post": {
+        "operationId": "CustomerController_logoutCustomer",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Customer"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/customer/update": {
+      "post": {
+        "operationId": "CustomerController_updateCustomer",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Customer"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/customer/leader-board/top-customers": {
+      "get": {
+        "operationId": "CustomerController_getTopCustomersForLeaderBoard",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Customer"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/promo/create": {
+      "post": {
+        "operationId": "PromoController_createPromotion",
+        "summary": "Create a new promotion",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Promo"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/promo/evaluate": {
+      "post": {
+        "operationId": "PromoController_evaluatePromotions",
+        "summary": "Evaluate active promotions for a transaction",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Promo"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/promo/active": {
+      "post": {
+        "operationId": "PromoController_getActivePromotions",
+        "summary": "Get active promotions for an organization (owned coupon-list contract)",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GetActivePromotionsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Promo"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/promo/list": {
+      "get": {
+        "operationId": "PromoController_listPromotions",
+        "summary": "List promotions in raw shape for admin dashboard",
+        "parameters": [
+          {
+            "name": "organizationId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Promo"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/promo/{id}": {
+      "get": {
+        "operationId": "PromoController_getPromotionById",
+        "summary": "Get a promotion by ID",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Promo"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/promo/{id}/update": {
+      "post": {
+        "operationId": "PromoController_updatePromotion",
+        "summary": "Update a promotion",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PromotionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Promo"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/promo/{id}/rules": {
+      "post": {
+        "operationId": "PromoController_upsertRules",
+        "summary": "Add or replace rules for a promotion",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Promo"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/promo/coupon/check": {
+      "post": {
+        "operationId": "PromoController_checkCoupon",
+        "summary": "Check a coupon against customer eligibility and cart value; returns applicability and computed discount",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CouponCheckDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Promo"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/promo/coupon/allocate": {
+      "post": {
+        "operationId": "PromoController_allocateCoupon",
+        "summary": "Allocate a new coupon to a customer",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Promo"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/promo/coupon/block": {
+      "post": {
+        "operationId": "PromoController_blockCoupon",
+        "summary": "Block (reserve) a coupon",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Promo"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/promo/coupon/release": {
+      "post": {
+        "operationId": "PromoController_releaseCoupon",
+        "summary": "Release a blocked coupon",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Promo"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/promo/coupon/claim": {
+      "post": {
+        "operationId": "PromoController_claimCoupon",
+        "summary": "Claim a coupon (finalize usage)",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Promo"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/promo/coupon/customer/{customerId}": {
+      "get": {
+        "operationId": "PromoController_getCustomerCoupons",
+        "summary": "Get all coupons for a customer",
+        "parameters": [
+          {
+            "name": "customerId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Promo"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/promo/coupon/{blockId}": {
+      "get": {
+        "operationId": "PromoController_getCoupon",
+        "summary": "Get a coupon by block ID",
+        "parameters": [
+          {
+            "name": "blockId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Promo"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/promo/claim/record": {
+      "post": {
+        "operationId": "PromoController_recordClaim",
+        "summary": "Record a new claim",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Promo"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/promo/claim/revoke": {
+      "post": {
+        "operationId": "PromoController_revokeClaim",
+        "summary": "Revoke a claim",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Promo"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/promo/claim/{id}": {
+      "get": {
+        "operationId": "PromoController_getClaimById",
+        "summary": "Get a claim by ID",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Promo"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/promo/claim/summary/{customerId}": {
+      "get": {
+        "operationId": "PromoController_getCustomerClaimSummary",
+        "summary": "Get claim summary for a customer",
+        "parameters": [
+          {
+            "name": "customerId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Promo"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/promo/codes/generate": {
+      "post": {
+        "operationId": "PromoController_generateCodes",
+        "summary": "Generate auto-generated coupon codes for a promotion",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Promo"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/promo/codes/validate": {
+      "post": {
+        "operationId": "PromoController_validateCode",
+        "summary": "Validate a coupon code",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Promo"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/promo/codes/allocate": {
+      "post": {
+        "operationId": "PromoController_allocateCode",
+        "summary": "Allocate an available code to a specific customer",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Promo"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/promo/codes/claim": {
+      "post": {
+        "operationId": "PromoController_claimCode",
+        "summary": "Claim/finalize a coupon code usage",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Promo"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/promo/codes/{programId}": {
+      "get": {
+        "operationId": "PromoController_listCodes",
+        "summary": "List all coupon codes for a promotion",
+        "parameters": [
+          {
+            "name": "programId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "customerId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Promo"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/promo/codes/{programId}/customer/{customerId}": {
+      "get": {
+        "operationId": "PromoController_getCodeByCustomer",
+        "summary": "Get coupon code for a specific customer",
+        "parameters": [
+          {
+            "name": "programId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "customerId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Promo"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/customer-organization/order": {
+      "post": {
+        "operationId": "CustomerOrganizationOrderController_createOrder",
+        "summary": "Create an order for a customer to organization",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "The order has been successfully created."
+          }
+        },
+        "tags": [
+          "Customer-Organization-Orders"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/customer-organization/order/customer": {
+      "get": {
+        "operationId": "CustomerOrganizationOrderController_getAllCustomerOrganizationOrders",
+        "summary": "get orders for a customer to organization",
+        "parameters": [
+          {
+            "name": "organizationId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Orders have been successfully fetched"
+          }
+        },
+        "tags": [
+          "Customer-Organization-Orders"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/customer-organization/order/potential-order-info/{id}": {
+      "get": {
+        "operationId": "CustomerOrganizationOrderController_fetchPotentialOrderInfo",
+        "summary": "get potential order info",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Order info successfully fetched"
+          }
+        },
+        "tags": [
+          "Customer-Organization-Orders"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/customer-organization/order/organization": {
+      "get": {
+        "operationId": "CustomerOrganizationOrderController_getAllOrders",
+        "summary": "Get orders for an organization with filters",
+        "parameters": [
+          {
+            "name": "organizationId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Orders have been successfully fetched"
+          }
+        },
+        "tags": [
+          "Customer-Organization-Orders"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/customer-organization/order/update": {
+      "post": {
+        "operationId": "CustomerOrganizationOrderController_updateOrder",
+        "summary": "update order for an organization",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "Orders have been successfully updated"
+          }
+        },
+        "tags": [
+          "Customer-Organization-Orders"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/customer-wallets/fetch-customer-wallets": {
+      "get": {
+        "operationId": "CustomerWalletController_fetchCustomerWallets",
+        "parameters": [
+          {
+            "name": "organizationId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 10,
+              "type": "number"
+            }
+          },
+          {
+            "name": "search",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "customer-wallets"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/customer-wallets/fetch-currency-wallet/{id}": {
+      "get": {
+        "operationId": "CustomerWalletController_fetchCurrencyWallet",
+        "parameters": [
+          {
+            "name": "organizationId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 10,
+              "type": "number"
+            }
+          },
+          {
+            "name": "search",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "customer-wallets"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/customer-wallets/broad-customer-balance": {
+      "get": {
+        "operationId": "CustomerWalletController_fetchBroadCustomerBalance",
+        "parameters": [
+          {
+            "name": "organizationId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "customer-wallets"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/loyalty-programs/program/create": {
+      "post": {
+        "operationId": "PointsController_createProgram",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProgramFormDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Loyalty Programs"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/loyalty-programs/eligible": {
+      "post": {
+        "operationId": "PointsController_findEligiblePrograms",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Loyalty Programs"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/loyalty-programs/calculate": {
+      "post": {
+        "operationId": "PointsController_calculateRewards",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Loyalty Programs"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/loyalty-programs/block": {
+      "post": {
+        "operationId": "PointsController_blockRewards",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Loyalty Programs"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/loyalty-programs/award": {
+      "post": {
+        "operationId": "PointsController_awardRewards",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Loyalty Programs"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/loyalty-programs/reverse": {
+      "post": {
+        "operationId": "PointsController_reverseRewards",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Loyalty Programs"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/loyalty-programs/expire": {
+      "post": {
+        "operationId": "PointsController_expireRewards",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Loyalty Programs"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/shop/fetch-active-shops-by-org-id": {
+      "get": {
+        "operationId": "ShopController_fetchActiveShopsOfAnOrg",
+        "parameters": [
+          {
+            "name": "organizationId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Shops of an Organization"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/shop/update": {
+      "post": {
+        "operationId": "ShopController_updateShop",
+        "summary": "Update shop details",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateShopForm"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Shop updated successfully."
+          }
+        },
+        "tags": [
+          "Shops of an Organization"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/admin/fetch-all-organizations": {
+      "get": {
+        "operationId": "AdminController_fetchAllOrganizations",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 10,
+              "type": "number"
+            }
+          },
+          {
+            "name": "search",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns paginated organizations list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OrganizationResponseDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/admin/fetch-all-customers": {
+      "get": {
+        "operationId": "AdminController_fetchAllCustomers",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 10,
+              "type": "number"
+            }
+          },
+          {
+            "name": "search",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns paginated organizations list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CustomerResponseDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/admin/fetch-organization/{id}": {
+      "get": {
+        "operationId": "AdminController_fetchOrganizationById",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/admin/fetch-customer/{id}": {
+      "get": {
+        "operationId": "AdminController_fetchCustomerById",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/admin/fetch-customer-wallets/{id}": {
+      "get": {
+        "operationId": "AdminController_fetchCustomerWallets",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 10,
+              "type": "number"
+            }
+          },
+          {
+            "name": "search",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/admin/fetch-customer-orders/{id}": {
+      "get": {
+        "operationId": "AdminController_fetchCustomerOrders",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 10,
+              "type": "number"
+            }
+          },
+          {
+            "name": "search",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/admin/fetch-organization-campaigns/{id}": {
+      "get": {
+        "operationId": "AdminController_fetchOrganizationCampaigns",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 10,
+              "type": "number"
+            }
+          },
+          {
+            "name": "search",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/admin/fetch-organization-currencies/{id}": {
+      "get": {
+        "operationId": "AdminController_fetchOrganizationCurrencies",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 10,
+              "type": "number"
+            }
+          },
+          {
+            "name": "search",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/admin/fetch-organization-customer-orders/{id}": {
+      "get": {
+        "operationId": "AdminController_fetchOrganizationCustomerOrders",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/admin/invite-org-admin": {
+      "post": {
+        "operationId": "AdminController_inviteShop",
+        "summary": "Invite an admin",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InviteAdminForm"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Admin invited successfully."
+          }
+        },
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ]
+      }
+    },
+    "/engines/fx/convert": {
+      "post": {
+        "operationId": "FXEngineController_convert",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/engines/fx/lock-rate": {
+      "post": {
+        "operationId": "FXEngineController_lockRate",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/engines/fx/historical-rates/{currencyCode}": {
+      "get": {
+        "operationId": "FXEngineController_getHistoricalRates",
+        "parameters": [
+          {
+            "name": "currencyCode",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "physicalCurrencyCode",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "startDate",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "endDate",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/engines/fx/reconciliation/{tenantId}": {
+      "get": {
+        "operationId": "FXEngineController_getReconciliationReport",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "startDate",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "endDate",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/engines/loyalty/tiers": {
+      "post": {
+        "operationId": "LoyaltyEngineController_upsertTiers",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/engines/loyalty/tiers/{organizationId}": {
+      "get": {
+        "operationId": "LoyaltyEngineController_getTiers",
+        "parameters": [
+          {
+            "name": "organizationId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/engines/loyalty/earn": {
+      "post": {
+        "operationId": "LoyaltyEngineController_earnPoints",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/engines/loyalty/burn": {
+      "post": {
+        "operationId": "LoyaltyEngineController_burnPoints",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/engines/loyalty/expire": {
+      "post": {
+        "operationId": "LoyaltyEngineController_expirePoints",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/engines/loyalty/statement": {
+      "post": {
+        "operationId": "LoyaltyEngineController_generateStatement",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/engines/loyalty/tier-status/{customerId}/{organizationId}": {
+      "get": {
+        "operationId": "LoyaltyEngineController_getCustomerTier",
+        "parameters": [
+          {
+            "name": "customerId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "organizationId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/engines/promo/codes": {
+      "post": {
+        "operationId": "PromoEngineController_createPromoCode",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/engines/promo/validate": {
+      "post": {
+        "operationId": "PromoEngineController_validatePromoCode",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/engines/promo/redeem": {
+      "post": {
+        "operationId": "PromoEngineController_redeemPromoCode",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/engines/promo/stacking": {
+      "post": {
+        "operationId": "PromoEngineController_evaluateStacking",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/engines/promo/redemptions/{customerId}/{organizationId}": {
+      "get": {
+        "operationId": "PromoEngineController_getRedemptionHistory",
+        "parameters": [
+          {
+            "name": "customerId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "organizationId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/engines/plb/programs": {
+      "post": {
+        "operationId": "PLBEngineController_createProgram",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/engines/plb/programs/{organizationId}": {
+      "get": {
+        "operationId": "PLBEngineController_getPrograms",
+        "parameters": [
+          {
+            "name": "organizationId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/engines/plb/metrics": {
+      "post": {
+        "operationId": "PLBEngineController_recordMetric",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/engines/plb/calculate": {
+      "post": {
+        "operationId": "PLBEngineController_calculateBonus",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/engines/plb/evaluate-cycle": {
+      "post": {
+        "operationId": "PLBEngineController_evaluateCycle",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/engines/plb/statement": {
+      "post": {
+        "operationId": "PLBEngineController_generateStatement",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/engines/value-exchange/agreements": {
+      "post": {
+        "operationId": "ValueExchangeEngineController_createAgreement",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/engines/value-exchange/agreements/{sourceEntityId}": {
+      "get": {
+        "operationId": "ValueExchangeEngineController_getAgreements",
+        "parameters": [
+          {
+            "name": "sourceEntityId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/engines/value-exchange/quote": {
+      "post": {
+        "operationId": "ValueExchangeEngineController_getQuote",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/engines/value-exchange/execute": {
+      "post": {
+        "operationId": "ValueExchangeEngineController_execute",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/engines/value-exchange/reverse": {
+      "post": {
+        "operationId": "ValueExchangeEngineController_reverse",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/engines/value-exchange/orders/{sourceCustomerId}/{sourceEntityId}": {
+      "get": {
+        "operationId": "ValueExchangeEngineController_getOrderHistory",
+        "parameters": [
+          {
+            "name": "sourceCustomerId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sourceEntityId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    }
+  },
+  "info": {
+    "title": "Loyalty Engine",
+    "description": "Loyalty engine",
+    "version": "1.0",
+    "contact": {}
+  },
+  "tags": [
+    {
+      "name": "loyalty-engine",
+      "description": ""
+    }
+  ],
+  "servers": [],
+  "components": {
+    "securitySchemes": {
+      "bearer": {
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "type": "http"
+      },
+      "x-api-key": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-api-key"
+      }
+    },
+    "schemas": {
+      "GetInTouchMeta": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "John Doe"
+          },
+          "email": {
+            "type": "string",
+            "example": "john.doe@example.com"
+          },
+          "message": {
+            "type": "string",
+            "example": "I have a question about your product."
+          }
+        },
+        "required": [
+          "name",
+          "email",
+          "message"
+        ]
+      },
+      "GetInTouch": {
+        "type": "object",
+        "properties": {
+          "metaData": {
+            "description": "Template meta info",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/GetInTouchMeta"
+              }
+            ]
+          }
+        },
+        "required": [
+          "metaData"
+        ]
+      },
+      "LoginOrganizationOtpForm": {
+        "type": "object",
+        "properties": {
+          "countryCode": {
+            "type": "string",
+            "description": "Country code",
+            "example": "91"
+          },
+          "phoneNumber": {
+            "type": "string",
+            "description": "Phone number",
+            "example": "9898989898"
+          },
+          "name": {
+            "type": "string",
+            "description": "Name",
+            "example": "X"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "ADMIN",
+              "SHOP"
+            ],
+            "example": "ADMIN"
+          },
+          "orgAdminId": {
+            "type": "string",
+            "description": "Admin ID",
+            "example": "X"
+          }
+        },
+        "required": [
+          "countryCode",
+          "phoneNumber"
+        ]
+      },
+      "ValidateOrganizationOtpForm": {
+        "type": "object",
+        "properties": {
+          "otp": {
+            "type": "string",
+            "description": "OTP",
+            "example": "123456"
+          },
+          "id": {
+            "type": "string",
+            "description": "Organization ID"
+          }
+        },
+        "required": [
+          "otp",
+          "id"
+        ]
+      },
+      "Object": {
+        "type": "object",
+        "properties": {}
+      },
+      "UpdateOrganizationForm": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "address": {
+            "type": "string"
+          },
+          "base64Logo": {
+            "type": "string"
+          },
+          "base64Cover": {
+            "type": "string"
+          },
+          "upiURI": {
+            "type": "string"
+          },
+          "contactUs": {
+            "type": "string"
+          },
+          "operationalHours": {
+            "type": "string"
+          },
+          "aboutUs": {
+            "type": "string"
+          }
+        }
+      },
+      "InviteShopForm": {
+        "type": "object",
+        "properties": {
+          "phoneNumber": {
+            "type": "string",
+            "description": "Phone number",
+            "example": "9899096444"
+          },
+          "location": {
+            "type": "string",
+            "description": "Shop location",
+            "example": "Ambala, Haryana"
+          }
+        },
+        "required": [
+          "phoneNumber",
+          "location"
+        ]
+      },
+      "GetActivePromotionsDto": {
+        "type": "object",
+        "properties": {
+          "organizationId": {
+            "type": "string"
+          },
+          "customerId": {
+            "type": "string"
+          },
+          "cartValue": {
+            "type": "number"
+          },
+          "cartCategories": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "isBankOffer": {
+            "type": "boolean"
+          },
+          "channel": {
+            "type": "string"
+          },
+          "page": {
+            "type": "number"
+          },
+          "limit": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "organizationId",
+          "customerId",
+          "cartValue",
+          "cartCategories",
+          "isBankOffer",
+          "channel",
+          "page",
+          "limit"
+        ]
+      },
+      "PromotionDto": {
+        "type": "object",
+        "properties": {
+          "organizationId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "couponCode": {
+            "type": "string"
+          },
+          "couponValue": {
+            "type": "number"
+          },
+          "subTitle": {
+            "type": "string"
+          },
+          "rewardType": {
+            "type": "string"
+          },
+          "minBankAmount": {
+            "type": "number"
+          },
+          "minimumCartValue": {
+            "type": "number"
+          },
+          "maxDiscountValue": {
+            "type": "number"
+          },
+          "businessType": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "maxClaimsPerUser": {
+            "type": "number"
+          },
+          "maxClaimsTotal": {
+            "type": "number"
+          },
+          "attributes": {
+            "type": "object"
+          },
+          "channels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "validFrom": {
+            "type": "string"
+          },
+          "validTo": {
+            "type": "string"
+          },
+          "eligibilityCriteria": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "organizationId",
+          "name",
+          "description",
+          "couponCode",
+          "couponValue",
+          "subTitle",
+          "rewardType",
+          "minBankAmount",
+          "minimumCartValue",
+          "maxDiscountValue",
+          "businessType",
+          "maxClaimsPerUser",
+          "maxClaimsTotal",
+          "attributes",
+          "channels",
+          "validFrom",
+          "validTo",
+          "eligibilityCriteria"
+        ]
+      },
+      "CouponCheckDto": {
+        "type": "object",
+        "properties": {
+          "organizationId": {
+            "type": "string"
+          },
+          "couponId": {
+            "type": "string"
+          },
+          "couponCode": {
+            "type": "string"
+          },
+          "customerId": {
+            "type": "string"
+          },
+          "cartValue": {
+            "type": "number"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "cartCategories": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "isBankOffer": {
+            "type": "boolean"
+          },
+          "channel": {
+            "type": "string"
+          },
+          "context": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "organizationId",
+          "couponId",
+          "couponCode",
+          "customerId",
+          "cartValue",
+          "currency",
+          "cartCategories",
+          "isBankOffer",
+          "channel",
+          "context"
+        ]
+      },
+      "ProgramFormDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "rewardCurrency": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "budgetEnabled": {
+            "type": "boolean"
+          },
+          "expiryNotification": {
+            "type": "boolean"
+          },
+          "priority": {
+            "type": "number"
+          },
+          "programType": {
+            "type": "string"
+          },
+          "business": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "rewardCurrency",
+          "status",
+          "budgetEnabled",
+          "expiryNotification",
+          "priority",
+          "programType",
+          "business",
+          "category"
+        ]
+      },
+      "UpdateShopForm": {
+        "type": "object",
+        "properties": {
+          "shopId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "address": {
+            "type": "string"
+          },
+          "upiURI": {
+            "type": "string"
+          },
+          "contactUs": {
+            "type": "string"
+          },
+          "operationalHours": {
+            "type": "string"
+          },
+          "aboutUs": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "shopId"
+        ]
+      },
+      "OrganizationResponseDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "CustomerResponseDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "InviteAdminForm": {
+        "type": "object",
+        "properties": {
+          "phoneNumber": {
+            "type": "string",
+            "description": "phone number",
+            "example": "9899096444"
+          },
+          "location": {
+            "type": "string",
+            "description": "Shop location",
+            "example": "Ambala, Haryana"
+          }
+        },
+        "required": [
+          "phoneNumber",
+          "location"
+        ]
+      }
+    }
+  }
+}

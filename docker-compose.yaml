@@ -14,8 +14,6 @@ services:
         condition: service_healthy
       special-redis:
         condition: service_healthy
-      mongodb:
-        condition: service_healthy
     networks:
       - lsbbe_net
     restart: unless-stopped
@@ -61,6 +59,7 @@ services:
       - POSTGRES_PASSWORD=${PG_DB_PASSWORD}
       - POSTGRES_DB=${PG_DB_NAME}
     volumes:
+      - 'postgres_data:/var/lib/postgresql/data'
       - ./non-service-conf-files/postgresql.conf:/etc/postgresql/postgresql.conf
       - ./non-service-conf-files/pg_hba.conf:/etc/postgresql/pg_hba.conf
     command: postgres -c config_file=/etc/postgresql/postgresql.conf -c hba_file=/etc/postgresql/pg_hba.conf
@@ -85,27 +84,6 @@ services:
       - lsbbe_net
     healthcheck:
       test: ['CMD-SHELL', 'redis-cli ping']
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  mongodb:
-    image: mongo:latest
-    container_name: 'lsbbe_mongodb'
-    restart: unless-stopped
-    ports:
-      - '27017:27017'
-    environment:
-      - MONGO_INITDB_DATABASE=agendadb
-    volumes:
-      - 'mongodb_data:/data/db'
-    networks:
-      lsbbe_net:
-        aliases:
-          - mongodb    # <-- Add these two lines here under networks
-    healthcheck:
-      test:
-        ['CMD-SHELL', 'mongosh --quiet --eval "db.runCommand({ping: 1}).ok"']
       interval: 5s
       timeout: 5s
       retries: 5
@@ -137,10 +115,10 @@ services:
       - 'host.docker.internal:host-gateway'
 
 volumes:
+  postgres_data:
+    name: 'postgres_volume'
   redis_data:
     name: 'redis_volume'
-  mongodb_data:
-    name: 'mongodb_volume'
   prometheus_data:
     name: 'prometheus_volume'
 

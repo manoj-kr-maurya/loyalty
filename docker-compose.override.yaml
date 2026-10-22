@@ -10,4 +10,3 @@ services:
       REDIS_HOST: special-redis
       REDIS_PORT: '6379'
       REDIS_TLS: 'false'
-      AGENDA_MONGO_DB_URI: mongodb://mongodb:27017/agendadb

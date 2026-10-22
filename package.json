@@ -9,13 +9,13 @@
     "depsInstall": "npm install && npm run db && npm run update-db-schema && npm run build",
     "build": "npx @nestjs/cli build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
-    "start": "node dist/main",
+    "start": "node dist/main.js",
     "update-db-schema": "npx prisma db push",
     "update-db-schema-with-loss": "npx prisma db push --accept-data-loss",
     "db": "npx prisma generate --schema=./prisma/schema.prisma",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
-    "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
+    "lint": "eslint \"{src,test}/**/*.ts\" --fix",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
@@ -27,7 +27,6 @@
     "resolve-migrations": "npx prisma migrate resolve --applied 0_init"
   },
   "dependencies": {
-    "@hokify/agenda": "^6.3.0",
     "@nestjs-modules/mailer": "^1.9.1",
     "@nestjs/axios": "^3.0.1",
     "@nestjs/cache-manager": "^2.1.1",
@@ -53,6 +52,7 @@
     "nest-winston": "^1.9.7",
     "nestjs-pino": "^4.0.0",
     "pg": "^8.14.1",
+    "pg-boss": "^10.4.2",
     "pino": "^8.20.0",
     "pino-loki": "^2.2.1",
     "pino-pretty": "^11.0.0",
@@ -69,7 +69,6 @@
     "@nestjs/cli": "^9.0.0",
     "@nestjs/schematics": "^9.0.0",
     "@nestjs/testing": "^9.0.0",
-    "@types/agenda": "^4.1.4",
     "@types/cache-manager-redis-store": "^2.0.3",
     "@types/express": "^4.17.13",
     "@types/hapi__joi": "^17.1.11",
@@ -101,18 +100,18 @@
       "json",
       "ts"
     ],
-    "rootDir": "src",
+    "rootDir": ".",
     "testRegex": ".*\\.spec\\.ts$",
     "transform": {
       "^.+\\.(t|j)s$": "ts-jest"
     },
     "collectCoverageFrom": [
-      "**/*.(t|j)s"
+      "src/**/*.(t|j)s"
     ],
-    "coverageDirectory": "../coverage",
+    "coverageDirectory": "coverage",
     "testEnvironment": "node",
     "moduleNameMapper": {
-      "^src/(.*)$": "<rootDir>/$1"
+      "^src/(.*)$": "<rootDir>/src/$1"
     }
   },
   "config": {

@@ -287,6 +287,8 @@ model RewardProgram {
   businessType       Json?
   maxClaimsPerUser   Int?
   maxClaimsTotal     Int?
+  attributes         Json?
+  channels           Channel[]
   startDate          DateTime          @default(now())
   endDate            DateTime          @default(now())
   timezone           String?           @default("UTC")
@@ -414,6 +416,13 @@ model AuditLog {
 enum RewardProgramType {
   PROMO
   LOYALTY
+}
+
+enum Channel {
+  APP
+  WEB
+  MWEB
+  ALL
 }
 
 enum RewardType {

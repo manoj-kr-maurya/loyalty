@@ -14,8 +14,8 @@ import {
   ExpiryReminderPayload,
   PGEventsEnum,
 } from './events.dto';
-import { CampaignJobProducer } from 'src/modules/domain/campaign/jobs/producer';
-import { CurrencyService } from 'src/modules/domain/currency/currency.service';
+import { CampaignJobProducer } from 'src/modules/campaign/jobs/producer';
+import { CurrencyService } from 'src/modules/currency/currency.service';
 
 @Injectable()
 export class PGListenerService implements OnModuleInit, OnModuleDestroy {

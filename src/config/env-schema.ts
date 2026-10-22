@@ -124,8 +124,6 @@ const validator = new CustomJOI();
 // Define the LSB_PG_URL as a required string
 validator.string(envEnums.LSB_PG_URL).required();
 
-// Define the AGENDA_MONGO_DB_URI as a required string
-validator.string(envEnums.AGENDA_MONGO_DB_URI).required();
 // Define the PORT as a required number with a default value of 3003
 validator.number(envEnums.PORT).default(3003).required();
 

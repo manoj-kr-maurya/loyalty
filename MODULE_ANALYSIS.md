@@ -1278,11 +1278,11 @@ ENVIRONMENT=dev|stage|prod
 ### Kubernetes Resources
 - Health checks configured for liveness/readiness probes
 - Graceful shutdown handling needed
-- Agenda job persistence requires MongoDB-compatible storage
+- Job persistence via pg-boss in PostgreSQL (`pgboss` schema)
 
 ### Scaling Considerations
 - Stateless API design (sessions in Redis)
-- Async jobs distributed via Agenda
+- Async jobs distributed via pg-boss
 - Database connection pooling via Prisma
 - Cache layer for frequently accessed data
 
