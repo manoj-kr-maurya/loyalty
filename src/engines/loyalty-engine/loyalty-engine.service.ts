@@ -5,6 +5,7 @@ import { CommonException } from 'src/common/exceptions/common.exception';
 import { StatusCodes } from 'src/common/enums/status-codes';
 import { EarningCalculatorService } from './services/earning-calculator.service';
 import { IdempotencyService } from './services/idempotency.service';
+import { OutboxService } from './services/outbox.service';
 import { WalletLedgerService } from './services/wallet-ledger.service';
 
 // ─── Input / Output Types ───────────────────────────────
@@ -113,6 +114,7 @@ export class LoyaltyEngineService {
     private readonly calculator: EarningCalculatorService,
     private readonly idempotency: IdempotencyService,
     private readonly walletLedger: WalletLedgerService,
+    private readonly outbox: OutboxService,
   ) {}
 
   // ─── Tier Management ──────────────────────────────────
@@ -318,6 +320,43 @@ export class LoyaltyEngineService {
           walletBalance = wallet?.availableBalance ?? 0;
         }
 
+        if (calculation.pointsEarned > 0) {
+          await this.outbox.enqueue(tx, {
+            organizationId,
+            eventType: 'points.earned',
+            aggregateId: customerId,
+            payload: {
+              customerId,
+              organizationId,
+              currencyCode,
+              amount,
+              pointsEarned: calculation.pointsEarned,
+              tierMultiplier: calculation.tierMultiplier,
+              effectiveRate: calculation.effectiveRate,
+              currentTier: calculation.currentTier.name,
+              orderRef: orderRef ?? null,
+              walletBalance,
+              expiryDate: expiryDate?.toISOString() ?? null,
+              metadata: metadata ?? null,
+            },
+          });
+        }
+
+        if (calculation.tierUpgraded) {
+          await this.outbox.enqueue(tx, {
+            organizationId,
+            eventType: 'tier.upgraded',
+            aggregateId: customerId,
+            payload: {
+              customerId,
+              organizationId,
+              previousTier: calculation.currentTier.name,
+              newTier: calculation.projectedTier.name,
+              lifetimePoints: calculation.newLifetimePoints,
+            },
+          });
+        }
+
         this.logger.log(
           `Earn: customer=${customerId} org=${organizationId} amount=${amount} points=${calculation.pointsEarned} tier=${calculation.projectedTier.name}`,
         );
@@ -394,6 +433,21 @@ export class LoyaltyEngineService {
             customerId_organizationId: { customerId, organizationId },
           },
           include: { tier: true },
+        });
+
+        await this.outbox.enqueue(tx, {
+          organizationId,
+          eventType: 'points.burned',
+          aggregateId: customerId,
+          payload: {
+            customerId,
+            organizationId,
+            currencyCode,
+            pointsBurned: points,
+            remainingBalance: debit.walletBalance,
+            orderRef: orderRef ?? null,
+            metadata: metadata ?? null,
+          },
         });
 
         this.logger.log(

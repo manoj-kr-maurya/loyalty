@@ -863,6 +863,55 @@ model LoyaltyOutboxEvent {
   @@map("loyaltyOutboxEvent")
 }
 
+enum LoyaltyWebhookDeliveryStatus {
+  PENDING
+  PROCESSING
+  SUCCESS
+  EXHAUSTED
+}
+
+model LoyaltyWebhookEndpoint {
+  id             String   @id @default(uuid())
+  organizationId String
+  url            String
+  secret         String
+  events         String[] @default([])
+  description    String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  deliveries LoyaltyWebhookDelivery[]
+
+  @@index([organizationId, isActive])
+  @@map("loyaltyWebhookEndpoint")
+}
+
+model LoyaltyWebhookDelivery {
+  id             String                      @id @default(uuid())
+  endpointId     String
+  endpoint       LoyaltyWebhookEndpoint      @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+  outboxEventId  String
+  organizationId String
+  eventType      String
+  payload        Json
+  status         LoyaltyWebhookDeliveryStatus @default(PENDING)
+  attempts       Int                         @default(0)
+  maxAttempts    Int                         @default(6)
+  nextAttemptAt  DateTime                    @default(now())
+  responseStatus Int?
+  responseBody   String?
+  lastError      String?
+  deliveredAt    DateTime?
+  createdAt      DateTime                    @default(now())
+  updatedAt      DateTime                    @updatedAt
+
+  @@unique([endpointId, outboxEventId])
+  @@index([status, nextAttemptAt])
+  @@index([organizationId, createdAt])
+  @@map("loyaltyWebhookDelivery")
+}
+
 // ─── Promo / Discount Engine ────────────────────────────
 
 model PromoCode {

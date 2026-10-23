@@ -2,6 +2,7 @@ import {
   Controller,
   Post,
   Get,
+  Delete,
   Body,
   Param,
   Query,
@@ -14,7 +15,14 @@ import { ApiHeader, ApiOperation, ApiSecurity, ApiTags } from '@nestjs/swagger';
 import { ApiKeyGuard } from 'src/common/guards/api-key.guard';
 import { LoyaltyEngineService } from './loyalty-engine.service';
 import { LedgerQueryService } from './services/ledger-query.service';
+import { WebhookService } from './services/webhook.service';
 import { LedgerQueryDto } from './dto/ledger-query.dto';
+import {
+  CreateWebhookDto,
+  OrganizationQueryDto,
+  WebhookDeliveryQueryDto,
+  WebhookEndpointQueryDto,
+} from './dto/webhook.dto';
 import {
   BurnPointsDto,
   EarnPointsDto,
@@ -32,6 +40,7 @@ export class LoyaltyEngineController {
   constructor(
     private readonly loyaltyEngine: LoyaltyEngineService,
     private readonly ledgerQuery: LedgerQueryService,
+    private readonly webhooks: WebhookService,
   ) {}
 
   @Get()
@@ -150,6 +159,40 @@ export class LoyaltyEngineController {
     @Query() query: LedgerQueryDto,
   ) {
     return this.ledgerQuery.list(customerId, query);
+  }
+
+  // ─── Webhooks ─────────────────────────────────────────
+
+  @Post('webhooks')
+  @ApiOperation({
+    summary: 'Register a webhook endpoint (secret returned once)',
+  })
+  async createWebhook(@Body() body: CreateWebhookDto) {
+    return this.webhooks.createEndpoint(body);
+  }
+
+  @Get('webhooks')
+  @ApiOperation({ summary: 'List webhook endpoints for an organization' })
+  async listWebhooks(@Query() query: WebhookEndpointQueryDto) {
+    return this.webhooks.listEndpoints(query);
+  }
+
+  @Delete('webhooks/:id')
+  @ApiOperation({ summary: 'Delete a webhook endpoint' })
+  async deleteWebhook(
+    @Param('id') id: string,
+    @Query() query: OrganizationQueryDto,
+  ) {
+    return this.webhooks.deleteEndpoint(id, query.organizationId);
+  }
+
+  @Get('webhooks/:id/deliveries')
+  @ApiOperation({ summary: 'List webhook delivery attempts' })
+  async listWebhookDeliveries(
+    @Param('id') id: string,
+    @Query() query: WebhookDeliveryQueryDto,
+  ) {
+    return this.webhooks.listDeliveries({ ...query, endpointId: id });
   }
 
   // ─── Tier Status ──────────────────────────────────────
