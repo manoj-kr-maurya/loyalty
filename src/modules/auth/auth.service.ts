@@ -27,13 +27,19 @@ export class AuthService {
     @Inject(CACHE_MANAGER) private cacheService: Cache,
   ) {}
 
-  // Generate JWT with token expiry validation
-  async generateJWT(entity: Organization | Customer): Promise<string> {
+  // Generate JWT with token expiry validation. The caller must supply the
+  // identity type explicitly: Prisma returns plain objects, so relying on
+  // `entity.constructor.name` yields "Object" for both customers and
+  // organizations and breaks every downstream authorization check.
+  async generateJWT(
+    entity: Organization | Customer,
+    userType: UserTypes,
+  ): Promise<string> {
     const sessionId = this.commonUtilsService.generateSessionId();
     const payload: Record<string, any> = {
       sub: entity.id,
       sessionId,
-      userType: entity.constructor.name as UserTypes,
+      userType,
     };
     const token = this.jwtService.sign(payload, {
       secret: this.configService.get(envEnums.JWT_SECRET),
@@ -65,8 +71,8 @@ export class AuthService {
         throw new InvalidSessionException();
       }
 
-      if (userType) {
-        // todo: do user type validation as well.
+      if (userType && payload.userType !== userType) {
+        throw new InvalidJWTException();
       }
 
       return payload;

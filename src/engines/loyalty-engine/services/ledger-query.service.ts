@@ -10,7 +10,11 @@ import { LedgerQueryDto } from '../dto/ledger-query.dto';
 export class LedgerQueryService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async list(customerId: string, query: LedgerQueryDto) {
+  async list(
+    customerId: string,
+    organizationId: string,
+    query: LedgerQueryDto,
+  ) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
     const skip = (page - 1) * limit;
@@ -27,9 +31,7 @@ export class LedgerQueryService {
 
     const where: Prisma.LoyaltyLedgerEntryWhereInput = {
       customerId,
-      ...(query.organizationId && {
-        organizationId: query.organizationId,
-      }),
+      organizationId,
       ...(query.currencyCode && { currencyCode: query.currencyCode }),
       ...(query.type?.length && { type: { in: query.type } }),
       ...((from || to) && {

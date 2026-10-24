@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Post, UseGuards, UsePipes } from '@nestjs/common';
 import { ApiTags, ApiSecurity } from '@nestjs/swagger';
-import { ApiKeyGuard } from 'src/common/guards/api-key.guard';
+import { OrganizationApiKeyGuard } from 'src/modules/auth/guards/organization-api-key.guard';
 import { JoiValidationPipe } from 'src/common/pipes/joi-validation.pipe';
 import { PointsService } from './points.service';
 import { ProgramFormDto, ProgramFormSchema } from './DTO/program.dto';
@@ -14,10 +14,15 @@ import {
 import { FilterContext, RuleDefinition } from 'src/modules/rule-engine/rule-engine.types';
 import { EligibilityCriteria } from 'src/modules/eligibility-engine/eligibility-engine.service';
 import { BudgetReservation } from 'src/modules/budget-engine/budget-engine.service';
+import { DeprecatedApi } from 'src/interceptors/deprecation/deprecated-api.decorator';
 
 @ApiTags('Loyalty Programs')
 @ApiSecurity('x-api-key')
-@UseGuards(ApiKeyGuard)
+@DeprecatedApi({
+  sunset: '2027-06-30T00:00:00Z',
+  replacement: '/engines/loyalty',
+})
+@UseGuards(OrganizationApiKeyGuard)
 @Controller('loyalty-programs')
 export class PointsController {
   constructor(private readonly pointsService: PointsService) {}

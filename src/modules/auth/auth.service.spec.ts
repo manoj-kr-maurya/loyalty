@@ -6,6 +6,7 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { MailAndSmsService } from '../mail-and-sms/mail-and-sms.service';
 import { CommonUtilsService } from 'src/common/utils/common-utils.service';
 import { TooManyAttemptsException } from 'src/common/exceptions/common.exception';
+import { UserTypes } from 'src/common/enums/user-types';
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -61,7 +62,7 @@ describe('AuthService', () => {
       mockCacheService.set.mockResolvedValue(undefined);
 
       const entity = { id: 'org-1', constructor: { name: 'Organization' } } as any;
-      const token = await service.generateJWT(entity);
+      const token = await service.generateJWT(entity, UserTypes.organization);
 
       expect(token).toBe('jwt-token-123');
       expect(mockJwtService.sign).toHaveBeenCalledWith(

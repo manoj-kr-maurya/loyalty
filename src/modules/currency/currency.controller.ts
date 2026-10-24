@@ -19,12 +19,16 @@ import {
 import { CurrencyResponseCodes } from './enums/responseCodes';
 import { CallStatuses } from 'src/common/enums/status-codes';
 import { ApiSecurity, ApiTags } from '@nestjs/swagger';
-import { ApiKeyGuard } from 'src/common/guards/api-key.guard';
+import { OrganizationApiKeyGuard } from 'src/modules/auth/guards/organization-api-key.guard';
+import { PlatformAdminGuard } from 'src/modules/auth/guards/platform-admin.guard';
 import { JoiValidationPipe } from 'src/common/pipes/joi-validation.pipe';
+import { CurrentAuth } from 'src/modules/auth/decorators/current-auth.decorator';
+import { OrganizationAuthContext } from 'src/modules/auth/api-key.service';
+import { resolveOrganizationId } from 'src/modules/auth/resolve-organization-id';
 
 @ApiTags('Currency')
 @ApiSecurity('x-api-key')
-@UseGuards(ApiKeyGuard)
+@UseGuards(OrganizationApiKeyGuard)
 @Controller('currency')
 export class CurrencyController {
   constructor(private readonly currencyService: CurrencyService) {}
@@ -33,9 +37,11 @@ export class CurrencyController {
   @UsePipes(new JoiValidationPipe(CreateCurrencySchema))
   async createCurrency(
     @Body() form: { organizationId: string; currencyCode: string; name: string },
+    @CurrentAuth() auth: OrganizationAuthContext,
   ) {
+    const organizationId = resolveOrganizationId(auth, form.organizationId);
     const currency = await this.currencyService.createCurrency(
-      form.organizationId,
+      organizationId,
       form,
     );
     return {
@@ -49,9 +55,11 @@ export class CurrencyController {
   @UsePipes(new JoiValidationPipe(CreateOrgCurrencyBucketSchema))
   async createOrganizationCurrencyBucket(
     @Body() form: { organizationId: string; currencyCode: string },
+    @CurrentAuth() auth: OrganizationAuthContext,
   ) {
+    const organizationId = resolveOrganizationId(auth, form.organizationId);
     await this.currencyService.createOrganizationCurrencyBucket(
-      form.organizationId,
+      organizationId,
       form,
     );
     return {
@@ -63,9 +71,16 @@ export class CurrencyController {
   @Get(`/get-organization-currency-buckets`)
   async getOrganizationCurrencyBuckets(
     @Query('organizationId') organizationId: string,
+    @CurrentAuth() auth: OrganizationAuthContext,
   ) {
+    const effectiveOrganizationId = resolveOrganizationId(
+      auth,
+      organizationId,
+    );
     const currencyBuckets =
-      await this.currencyService.getOrganizationCurrencyBuckets(organizationId);
+      await this.currencyService.getOrganizationCurrencyBuckets(
+        effectiveOrganizationId,
+      );
     return {
       status: 'success',
       code: CurrencyResponseCodes.Currency_Buckets_Fetched,
@@ -74,12 +89,15 @@ export class CurrencyController {
   }
 
   @Post('/add-balance-to-organization-currency-bucket')
+  @UseGuards(PlatformAdminGuard)
   @UsePipes(new JoiValidationPipe(AddBalanceSchema))
   async addBalanceToOrganizationCurrencyBucket(
     @Body() form: { organizationId: string; currencyCode: string; amount: number },
+    @CurrentAuth() auth: OrganizationAuthContext,
   ) {
+    const organizationId = resolveOrganizationId(auth, form.organizationId);
     await this.currencyService.addBalanceToOrganizationCurrencyBucket(
-      form.organizationId,
+      organizationId,
       form.currencyCode,
       form.amount,
     );
@@ -90,12 +108,15 @@ export class CurrencyController {
   }
 
   @Post('/update-organization-currency-bucket')
-  @UsePipes(new JoiValidationPipe(UpdateBucketPropertiesSchema))
   async enableAutoTopupForOrganizationCurrencyBucket(
-    @Body() form: { id: string; autoTopUpEnabled: boolean; autoTopUpThreshold?: number; autoTopUpAmount?: number },
+    @Body(new JoiValidationPipe(UpdateBucketPropertiesSchema)) form: { id: string; autoTopUpEnabled: boolean; autoTopUpThreshold?: number; autoTopUpAmount?: number },
+    @Query('organizationId') requestedOrganizationId: string,
+    @CurrentAuth() auth: OrganizationAuthContext,
   ) {
+    const organizationId = resolveOrganizationId(auth, requestedOrganizationId);
     const currencyBucket =
       await this.currencyService.updateOrganizationCurrencyBucketProperties(
+        organizationId,
         form as any,
       );
     return {
@@ -109,10 +130,15 @@ export class CurrencyController {
   async searchCurrencies(
     @Param('substring') substring: string,
     @Query('organizationId') organizationId: string,
+    @CurrentAuth() auth: OrganizationAuthContext,
   ) {
+    const effectiveOrganizationId = resolveOrganizationId(
+      auth,
+      organizationId,
+    );
     const currencies = await this.currencyService.searchNonOrgCurrencies(
       substring,
-      organizationId,
+      effectiveOrganizationId,
     );
     return {
       status: CallStatuses.Success,
@@ -124,9 +150,11 @@ export class CurrencyController {
   @Post(`/org-data-needed-by-customer`)
   async getOrganizationCurrencies(
     @Body() form: { organizationId: string; customerId?: string },
+    @CurrentAuth() auth: OrganizationAuthContext,
   ) {
+    const organizationId = resolveOrganizationId(auth, form.organizationId);
     const data = await this.currencyService.getOrgDataForCustomer(
-      form.organizationId,
+      organizationId,
       form.customerId ?? '',
     );
     return {
@@ -139,9 +167,11 @@ export class CurrencyController {
   @UsePipes(new JoiValidationPipe(FilterOrgCurrenciesSchema))
   async filterOrgCreatedCurrencies(
     @Body() form: { organizationId: string; currencyCodes: string[] },
+    @CurrentAuth() auth: OrganizationAuthContext,
   ) {
+    const organizationId = resolveOrganizationId(auth, form.organizationId);
     const data = await this.currencyService.filterOrgCreatedCurrencies(
-      form.organizationId,
+      organizationId,
       form.currencyCodes,
     );
     return {

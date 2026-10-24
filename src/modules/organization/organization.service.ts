@@ -123,12 +123,14 @@ export class OrganizationService {
     }
 
     const organization = await this.getOrganization(form.id);
-    const token = await this.authService.generateJWT(organization);
+    const token = await this.authService.generateJWT(
+      organization,
+      UserTypes.organization,
+    );
     organization.token = token;
     if (!organization.isVerified) {
       const { id, ...dataWithoutId } = organization;
-      let parentOrganizationName = '';
-      let address = '';
+      let inviteDetails: { name?: string; address?: string } | null = null;
 
       try {
         const invite = await this.commonDbService.findInvite({
@@ -144,18 +146,20 @@ export class OrganizationService {
           );
         }
         const parentOrganization = await this.getParentOrganization(invite);
-        parentOrganizationName = parentOrganization?.name ?? '';
-        address = invite.location;
+        inviteDetails = {
+          ...(parentOrganization?.name
+            ? { name: parentOrganization.name }
+            : {}),
+          ...(invite.location ? { address: invite.location } : {}),
+        };
       } catch {
-        // No invite found for self-registered org
-        parentOrganizationName = '';
+        inviteDetails = null;
       }
 
       await this.organizationPrismaHelperService.updateOrganization(
         {
           ...dataWithoutId,
-          name: parentOrganizationName,
-          address,
+          ...(inviteDetails ?? {}),
           isVerified: true,
         },
         {

@@ -10,17 +10,20 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiSecurity, ApiTags } from '@nestjs/swagger';
-import { ApiKeyGuard } from 'src/common/guards/api-key.guard';
+import { OrganizationApiKeyGuard } from 'src/modules/auth/guards/organization-api-key.guard';
+import { ScopesGuard } from 'src/modules/auth/guards/scopes.guard';
+import { RequireScopes } from 'src/modules/auth/decorators/require-scopes.decorator';
 import { FXEngineService } from './fx-engine.service';
 
 @ApiTags('engines-fx')
 @ApiSecurity('x-api-key')
-@UseGuards(ApiKeyGuard)
+@UseGuards(OrganizationApiKeyGuard, ScopesGuard)
 @Controller('engines/fx')
 export class FXEngineController {
   constructor(private readonly fxEngine: FXEngineService) {}
 
   @Post('convert')
+  @RequireScopes('fx:write')
   @HttpCode(HttpStatus.OK)
   async convert(@Body() body: {
     fromCurrency: string;
@@ -34,6 +37,7 @@ export class FXEngineController {
   }
 
   @Post('lock-rate')
+  @RequireScopes('fx:write')
   @HttpCode(HttpStatus.OK)
   async lockRate(@Body() body: {
     currencyCode: string;
@@ -46,6 +50,7 @@ export class FXEngineController {
   }
 
   @Get('historical-rates/:currencyCode')
+  @RequireScopes('fx:read')
   async getHistoricalRates(
     @Param('currencyCode') currencyCode: string,
     @Query('physicalCurrencyCode') physicalCurrencyCode: string,
@@ -61,6 +66,7 @@ export class FXEngineController {
   }
 
   @Get('reconciliation/:tenantId')
+  @RequireScopes('fx:read')
   async getReconciliationReport(
     @Param('tenantId') tenantId: string,
     @Query('startDate') startDate: string,

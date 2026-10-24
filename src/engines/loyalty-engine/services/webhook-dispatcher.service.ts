@@ -10,6 +10,10 @@ import {
   shouldExhaust,
   signWebhookPayload,
 } from './webhook-signature';
+import {
+  assertSafeWebhookUrl,
+  decryptWebhookSecret,
+} from './webhook-security.util';
 
 interface OutboxRow {
   id: string;
@@ -257,9 +261,14 @@ export class WebhookDispatcherService implements OnModuleInit {
     endpoint: { url: string; secret: string },
     delivery: { id: string; eventType: string; payload: Prisma.JsonValue },
   ) {
+    assertSafeWebhookUrl(endpoint.url);
     const rawBody = JSON.stringify(delivery.payload);
     const timestamp = Math.floor(Date.now() / 1000);
-    const signature = signWebhookPayload(endpoint.secret, timestamp, rawBody);
+    const signature = signWebhookPayload(
+      decryptWebhookSecret(endpoint.secret),
+      timestamp,
+      rawBody,
+    );
 
     const response = await firstValueFrom(
       this.http.post(endpoint.url, rawBody, {

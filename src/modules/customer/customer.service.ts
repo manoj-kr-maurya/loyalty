@@ -39,7 +39,7 @@ export class CustomerService {
         form,
       );
 
-    this.authService.sendLoginOtp({
+    await this.authService.sendLoginOtp({
       userType: UserTypes.customer,
       referenceId: customer.id,
       phoneNumber: customer.phoneNumber,
@@ -61,7 +61,10 @@ export class CustomerService {
     const customer = await this.customerPrismaHelperService.findCustomer({
       id: form.id,
     });
-    const token = await this.authService.generateJWT(customer);
+    const token = await this.authService.generateJWT(
+      customer,
+      UserTypes.customer,
+    );
     customer.token = token;
     const updatedCustomer =
       await this.customerPrismaHelperService.updateCustomer(
@@ -112,7 +115,7 @@ export class CustomerService {
     customerId: string,
     form: UpdateCustomerForm,
   ) {
-    const { base64Logo, ...restOfTheForm } = form;
+    const { base64Logo, name } = form;
     const customer = await this.getCustomerById(customerId);
     let logoUrl = customer.logoUrl;
 
@@ -120,12 +123,67 @@ export class CustomerService {
       logoUrl = await this.imgbbService.uploadImage(base64Logo, 'logo');
     }
 
+    // Whitelist mutable fields. The Joi schema allows unknown keys, so
+    // spreading the raw form here would let a caller overwrite `token`,
+    // `phoneNumber`, or `isVerified`.
     const newCustomer = await this.updateCustomer({
       ...customer,
-      ...restOfTheForm,
+      ...(name !== undefined && { name }),
       ...(base64Logo && { logoUrl }),
     });
     return newCustomer;
+  }
+
+  async getCustomerForOrganization(
+    customerId: string,
+    organizationId: string,
+    balances: boolean,
+  ) {
+    await this.customerPrismaHelperService.assertCustomerBelongsToOrganization(
+      customerId,
+      organizationId,
+    );
+    return this.someFunctionThatMyGetCustomerEndPointWillCall(
+      customerId,
+      balances,
+    );
+  }
+
+  async getCustomerByIdForOrganization(
+    customerId: string,
+    organizationId: string,
+  ) {
+    await this.customerPrismaHelperService.assertCustomerBelongsToOrganization(
+      customerId,
+      organizationId,
+    );
+    return this.getCustomerById(customerId);
+  }
+
+  async updateCustomerForOrganization(
+    customerId: string,
+    organizationId: string,
+    form: UpdateCustomerForm,
+  ) {
+    await this.customerPrismaHelperService.assertCustomerBelongsToOrganization(
+      customerId,
+      organizationId,
+    );
+    return this.someFunctionThatMyUpdateCustomerEndPointWillCall(
+      customerId,
+      form,
+    );
+  }
+
+  async logoutCustomerForOrganization(
+    customerId: string,
+    organizationId: string,
+  ) {
+    await this.customerPrismaHelperService.assertCustomerBelongsToOrganization(
+      customerId,
+      organizationId,
+    );
+    return this.logoutCustomer(customerId);
   }
 
   @InvalidateCache([
@@ -173,12 +231,18 @@ export class CustomerService {
     ttl: 60, // 1 minute TTL as specified
     serviceName: 'CustomerService',
     methodName: 'getTopCustomersForLeaderBoard',
-    cacheKeyParams: (args) => ({ interval: args[0] || 48 }),
+    cacheKeyParams: (args) => ({ interval: args[0] || 48, organizationId: args[1] }),
   })
-  async getTopCustomersForLeaderBoard(interval = 48) {
-    this.logger.debug(`Cache miss for leaderboard with interval: ${interval}h`);
+  async getTopCustomersForLeaderBoard(
+    interval = 48,
+    organizationId?: string,
+  ) {
+    this.logger.debug(
+      `Cache miss for leaderboard with interval: ${interval}h org=${organizationId}`,
+    );
     return await this.customerPrismaHelperService.getTopCustomersForLeaderBoard(
       interval,
+      organizationId,
     );
   }
 

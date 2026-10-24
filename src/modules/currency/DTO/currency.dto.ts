@@ -67,8 +67,8 @@ export const AddBalanceSchema = Joi.object({
 export const UpdateBucketPropertiesSchema = Joi.object({
   id: Joi.string().required(),
   autoTopUpEnabled: Joi.boolean().required(),
-  autoTopUpThreshold: Joi.number().optional(),
-  autoTopUpAmount: Joi.number().optional(),
+  autoTopUpThreshold: Joi.number().min(0).optional(),
+  autoTopUpAmount: Joi.number().min(1).optional(),
 });
 
 export const FilterOrgCurrenciesSchema = Joi.object({

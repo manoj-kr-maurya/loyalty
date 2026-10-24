@@ -58,10 +58,15 @@ export class TierDefinitionDto {
 }
 
 export class UpsertTiersDto {
-  @ApiProperty({ example: 'c8f1e2a0-...' })
+  @ApiPropertyOptional({
+    example: 'c8f1e2a0-...',
+    description:
+      'Required for platform keys; ignored for organization-scoped keys.',
+  })
+  @IsOptional()
   @IsString()
   @IsNotEmpty()
-  organizationId: string;
+  organizationId?: string;
 
   @ApiProperty({ type: [TierDefinitionDto] })
   @IsArray()
@@ -76,10 +81,15 @@ export class EarnPointsDto {
   @IsNotEmpty()
   customerId: string;
 
-  @ApiProperty({ example: '9a8b7c6d-...' })
+  @ApiPropertyOptional({
+    example: '9a8b7c6d-...',
+    description:
+      'Required for platform keys; ignored for organization-scoped keys.',
+  })
+  @IsOptional()
   @IsString()
   @IsNotEmpty()
-  organizationId: string;
+  organizationId?: string;
 
   @ApiProperty({ example: 2500, description: 'Base transaction amount' })
   @IsNumber()
@@ -124,10 +134,15 @@ export class BurnPointsDto {
   @IsNotEmpty()
   customerId: string;
 
-  @ApiProperty({ example: '9a8b7c6d-...' })
+  @ApiPropertyOptional({
+    example: '9a8b7c6d-...',
+    description:
+      'Required for platform keys; ignored for organization-scoped keys.',
+  })
+  @IsOptional()
   @IsString()
   @IsNotEmpty()
-  organizationId: string;
+  organizationId?: string;
 
   @ApiProperty({ example: 500 })
   @IsNumber()
@@ -159,10 +174,15 @@ export class BurnPointsDto {
 }
 
 export class ExpirePointsDto {
-  @ApiProperty({ example: '9a8b7c6d-...' })
+  @ApiPropertyOptional({
+    example: '9a8b7c6d-...',
+    description:
+      'Required for platform keys; ignored for organization-scoped keys.',
+  })
+  @IsOptional()
   @IsString()
   @IsNotEmpty()
-  organizationId: string;
+  organizationId?: string;
 
   @ApiProperty({ example: 'PTS' })
   @IsString()
@@ -180,10 +200,25 @@ export class LoyaltyStatementDto {
   @IsNotEmpty()
   customerId: string;
 
-  @ApiProperty({ example: '9a8b7c6d-...' })
+  @ApiPropertyOptional({
+    example: '9a8b7c6d-...',
+    description:
+      'Required for platform keys; ignored for organization-scoped keys.',
+  })
+  @IsOptional()
   @IsString()
   @IsNotEmpty()
-  organizationId: string;
+  organizationId?: string;
+
+  @ApiPropertyOptional({
+    example: 'PTS',
+    description:
+      'Optional currency. Defaults to the organization\'s oldest currency.',
+  })
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  currencyCode?: string;
 
   @ApiProperty({ example: '2026-01-01T00:00:00.000Z' })
   @IsDateString()
@@ -200,10 +235,15 @@ export class EstimatePointsDto {
   @IsNotEmpty()
   customerId: string;
 
-  @ApiProperty({ example: '9a8b7c6d-...' })
+  @ApiPropertyOptional({
+    example: '9a8b7c6d-...',
+    description:
+      'Required for platform keys; ignored for organization-scoped keys.',
+  })
+  @IsOptional()
   @IsString()
   @IsNotEmpty()
-  organizationId: string;
+  organizationId?: string;
 
   @ApiProperty({ example: 2500, description: 'Base transaction amount' })
   @IsNumber()

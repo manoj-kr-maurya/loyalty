@@ -5,6 +5,8 @@ import { CustomerWalletAggregate } from './customer-wallet-aggregate';
 import { CustomerWalletJobProducer } from './jobs/producer';
 import { getPaginationMetadata } from 'src/common/utils/pagination.util';
 import { PaginationQueryDto } from 'src/common/dto/pagination.dto';
+import { CommonException } from 'src/common/exceptions/common.exception';
+import { StatusCodes } from 'src/common/enums/status-codes';
 
 /**
  * CustomerWalletService — stateless read service + factory for wallet aggregates.
@@ -47,13 +49,24 @@ export class CustomerWalletService {
     return new CustomerWalletAggregate(prisma, this.customerWalletsQueueJobProducer, wallet);
   }
 
-  async fetchCustomerWallets(customerId: string, query: PaginationQueryDto) {
+  async fetchCustomerWallets(
+    customerId: string,
+    organizationId: string,
+    query: PaginationQueryDto,
+  ) {
     const { page = 1, limit = 10, search } = query;
     const skip = (page - 1) * limit;
+
+    const orgCurrencies = await this.prisma.currency.findMany({
+      where: { organizationId },
+      select: { code: true },
+    });
+    const orgCurrencyCodes = orgCurrencies.map((currency) => currency.code);
 
     // Build base where clause
     const where: Prisma.CustomerWalletWhereInput = {
       customerId,
+      currencyCode: { in: orgCurrencyCodes },
       availableBalance: { gt: 0 },
     };
 
@@ -151,11 +164,32 @@ export class CustomerWalletService {
 
   async fetchCurrencyWalletPockets(
     customerId: string,
+    organizationId: string,
     currencyWalletId: string,
     query: PaginationQueryDto,
   ) {
     const { page = 1, limit = 10 } = query;
     const skip = (page - 1) * limit;
+
+    const orgCurrencies = await this.prisma.currency.findMany({
+      where: { organizationId },
+      select: { code: true },
+    });
+    const wallet = await this.prisma.customerWallet.findFirst({
+      where: {
+        id: currencyWalletId,
+        customerId,
+        currencyCode: { in: orgCurrencies.map((currency) => currency.code) },
+      },
+      select: { id: true },
+    });
+
+    if (!wallet) {
+      throw new CommonException(
+        'Wallet not found for customer',
+        StatusCodes.NOT_FOUND,
+      );
+    }
 
     const [pockets, totalItems] = await Promise.all([
       this.prisma.customerWalletPocket.findMany({
@@ -172,7 +206,8 @@ export class CustomerWalletService {
       }),
       this.prisma.customerWalletPocket.count({
         where: {
-          id: currencyWalletId,
+          customerWalletId: currencyWalletId,
+          availableBalance: { gt: 0 },
         },
       }),
     ]);
@@ -185,10 +220,19 @@ export class CustomerWalletService {
     };
   }
 
-  async fetchBroadCustomerBalance(customerId: string) {
-    // Fetch all wallets for the customer with required balances
+  async fetchBroadCustomerBalance(
+    customerId: string,
+    organizationId: string,
+  ) {
+    const orgCurrencies = await this.prisma.currency.findMany({
+      where: { organizationId },
+      select: { code: true },
+    });
     const wallets = await this.prisma.customerWallet.findMany({
-      where: { customerId },
+      where: {
+        customerId,
+        currencyCode: { in: orgCurrencies.map((currency) => currency.code) },
+      },
       select: {
         id: true,
         currencyCode: true,

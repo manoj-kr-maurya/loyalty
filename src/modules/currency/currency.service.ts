@@ -17,6 +17,8 @@ import { OrganizationOrderService } from '../organization-order/organization-ord
 import { PrismaService } from 'src/common/services/prismaService';
 import { CurrencyJobProducer } from './jobs/producer';
 import { NotAuthorisedToCreateCurrencyException } from './exceptions/currency.exception';
+import { CommonException } from 'src/common/exceptions/common.exception';
+import { StatusCodes } from 'src/common/enums/status-codes';
 
 @Injectable()
 export class CurrencyService {
@@ -36,6 +38,9 @@ export class CurrencyService {
     const organization = await this.organizationService.getOrganization(
       organizationId,
     );
+    if (!organization) {
+      throw new CommonException('Organization not found', StatusCodes.NOT_FOUND);
+    }
     if (organization.role !== 'ADMIN') {
       throw new NotAuthorisedToCreateCurrencyException();
     }
@@ -117,6 +122,9 @@ export class CurrencyService {
     const organization = await this.organizationService.getOrganization(
       organizationId,
     );
+    if (!organization) {
+      throw new CommonException('Organization not found', StatusCodes.NOT_FOUND);
+    }
     const currencies = await this.searchOrgCurrencies(
       organization.role === OrganizationRoles.ADMIN
         ? organizationId
@@ -154,7 +162,7 @@ export class CurrencyService {
     }));
 
     return {
-      name: organization.name ?? 'Fruity Bear',
+      name: organization.name ?? '',
       currenciesThatOrgAcceptWithCustomerAvailableBalanceForThatCurrency:
         currenciesWithBalance,
       ...(organization.upiURI && {
@@ -248,8 +256,21 @@ export class CurrencyService {
   }
 
   async updateOrganizationCurrencyBucketProperties(
+    organizationId: string,
     form: UpdateCurrencyBucketPropertiesForm,
   ) {
+    const bucket = await this.prisma.currencyBucket.findFirst({
+      where: { id: form.id, organizationId },
+      select: { id: true },
+    });
+
+    if (!bucket) {
+      throw new CommonException(
+        'Currency bucket not found for organization',
+        StatusCodes.NOT_FOUND,
+      );
+    }
+
     return await this.currencyPrismaHelperService.updateOrganizationCurrencyBucket(
       form.id,
       form.autoTopUpEnabled,

@@ -22,9 +22,10 @@ import {
 } from './DTO/organizations.dto';
 import { OrganizationResponseCodes } from './enums/responseCodes';
 import { OrganizationService } from './organization.service';
-import { ApiKeyGuard } from 'src/common/guards/api-key.guard';
+import { OrganizationApiKeyGuard } from 'src/modules/auth/guards/organization-api-key.guard';
 import { PaginationQueryDto } from 'src/common/dto/pagination.dto';
 import { JoiValidationPipe } from 'src/common/pipes/joi-validation.pipe';
+import { withoutToken } from 'src/common/utils/redact.util';
 
 @ApiTags('Organization')
 @Controller('organization')
@@ -82,7 +83,7 @@ export class OrganizationController {
   // ─── Protected endpoints (API key required) ─────────────────────
 
   @Get('/get-your-admin')
-  @UseGuards(ApiKeyGuard)
+  @UseGuards(OrganizationApiKeyGuard)
   @ApiSecurity('x-api-key')
   @ApiOperation({ summary: 'Get your admin details' })
   @ApiResponse({ status: 200, description: 'Admin details fetched successfully.' })
@@ -97,12 +98,12 @@ export class OrganizationController {
     return {
       status: CallStatuses.Success,
       code: OrganizationResponseCodes.Fetched_Your_Admin,
-      data: organization,
+      data: withoutToken(organization),
     };
   }
 
   @Get(`/`)
-  @UseGuards(ApiKeyGuard)
+  @UseGuards(OrganizationApiKeyGuard)
   @ApiSecurity('x-api-key')
   @ApiOperation({ summary: 'Get organization details' })
   @ApiResponse({ status: 200, description: 'Organization details fetched successfully.' })
@@ -111,13 +112,13 @@ export class OrganizationController {
       await this.organizationService.getOrganizationAndMetaFlags(organizationId);
     return {
       status: CallStatuses.Success,
-      data: { organization, metaFlags },
+      data: { organization: withoutToken(organization), metaFlags },
       code: OrganizationResponseCodes.Organization_Fetched,
     };
   }
 
   @Post(`/logout`)
-  @UseGuards(ApiKeyGuard)
+  @UseGuards(OrganizationApiKeyGuard)
   @ApiSecurity('x-api-key')
   @ApiOperation({ summary: 'Logout organization' })
   @ApiResponse({ status: 200, description: 'Organization logged out successfully.' })
@@ -126,7 +127,7 @@ export class OrganizationController {
   }
 
   @Post('/update')
-  @UseGuards(ApiKeyGuard)
+  @UseGuards(OrganizationApiKeyGuard)
   @ApiSecurity('x-api-key')
   @UsePipes(new JoiValidationPipe(UpdateOrganizationSchema))
   @ApiOperation({ summary: 'Update organization details' })
@@ -149,7 +150,7 @@ export class OrganizationController {
   }
 
   @Post('/invite-shop')
-  @UseGuards(ApiKeyGuard)
+  @UseGuards(OrganizationApiKeyGuard)
   @ApiSecurity('x-api-key')
   @UsePipes(new JoiValidationPipe(InviteShopSchema))
   @ApiOperation({ summary: 'Invite a shop' })
@@ -171,7 +172,7 @@ export class OrganizationController {
   }
 
   @Get('/invited-shops')
-  @UseGuards(ApiKeyGuard)
+  @UseGuards(OrganizationApiKeyGuard)
   @ApiSecurity('x-api-key')
   @ApiOperation({ summary: 'Get invited shops' })
   @ApiResponse({ status: 200, description: 'Invited shops fetched successfully.' })
@@ -185,7 +186,7 @@ export class OrganizationController {
   }
 
   @Get('/leader-board/top-organizations')
-  @UseGuards(ApiKeyGuard)
+  @UseGuards(OrganizationApiKeyGuard)
   @ApiSecurity('x-api-key')
   async getTopOrganizationsForLeaderBoard(@Query() query: PaginationQueryDto) {
     const leaderBoardEntries =
@@ -198,7 +199,7 @@ export class OrganizationController {
   }
 
   @Get('/leader-board/organization/detail/:orgAdminId')
-  @UseGuards(ApiKeyGuard)
+  @UseGuards(OrganizationApiKeyGuard)
   @ApiSecurity('x-api-key')
   async getTopOrganizationDetailForLeaderBoard(
     @Query('organizationId') organizationId: string,

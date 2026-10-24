@@ -9,12 +9,14 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiSecurity, ApiTags } from '@nestjs/swagger';
-import { ApiKeyGuard } from 'src/common/guards/api-key.guard';
+import { OrganizationApiKeyGuard } from 'src/modules/auth/guards/organization-api-key.guard';
+import { ScopesGuard } from 'src/modules/auth/guards/scopes.guard';
+import { RequireScopes } from 'src/modules/auth/decorators/require-scopes.decorator';
 import { PLBEngineService } from './plb-engine.service';
 
 @ApiTags('engines-plb')
 @ApiSecurity('x-api-key')
-@UseGuards(ApiKeyGuard)
+@UseGuards(OrganizationApiKeyGuard, ScopesGuard)
 @Controller('engines/plb')
 export class PLBEngineController {
   constructor(private readonly plbEngine: PLBEngineService) {}
@@ -22,6 +24,7 @@ export class PLBEngineController {
   // ─── Program CRUD ─────────────────────────────────────
 
   @Post('programs')
+  @RequireScopes('plb:write')
   @HttpCode(HttpStatus.CREATED)
   async createProgram(@Body() body: {
     organizationId: string;
@@ -51,6 +54,7 @@ export class PLBEngineController {
   }
 
   @Get('programs/:organizationId')
+  @RequireScopes('plb:read')
   async getPrograms(@Param('organizationId') organizationId: string) {
     return this.plbEngine.getPrograms(organizationId);
   }
@@ -58,6 +62,7 @@ export class PLBEngineController {
   // ─── Metrics ──────────────────────────────────────────
 
   @Post('metrics')
+  @RequireScopes('plb:write')
   @HttpCode(HttpStatus.CREATED)
   async recordMetric(@Body() body: {
     organizationId: string;
@@ -78,6 +83,7 @@ export class PLBEngineController {
   // ─── Bonus Calculation ────────────────────────────────
 
   @Post('calculate')
+  @RequireScopes('plb:read')
   @HttpCode(HttpStatus.OK)
   async calculateBonus(@Body() body: {
     organizationId: string;
@@ -94,6 +100,7 @@ export class PLBEngineController {
   }
 
   @Post('evaluate-cycle')
+  @RequireScopes('plb:write')
   @HttpCode(HttpStatus.OK)
   async evaluateCycle(@Body() body: {
     organizationId: string;
@@ -111,6 +118,7 @@ export class PLBEngineController {
   // ─── Statement ────────────────────────────────────────
 
   @Post('statement')
+  @RequireScopes('plb:read')
   @HttpCode(HttpStatus.OK)
   async generateStatement(@Body() body: {
     customerId: string;

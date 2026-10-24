@@ -13,7 +13,7 @@ export function getPaginationMetadata(
   limit: number,
 ) {
   const totalPages = Math.ceil(totalItems / limit);
-  const currentPage = Math.min(page, totalPages);
+  const currentPage = totalPages === 0 ? 1 : Math.min(page, totalPages);
   const itemsPerPage = limit;
 
   return {
@@ -23,9 +23,8 @@ export function getPaginationMetadata(
     itemsPerPage,
     hasNextPage: currentPage < totalPages,
     hasPreviousPage: currentPage > 1,
-    // Optional: include these if you want to show page ranges
-    startItem: (currentPage - 1) * limit + 1,
-    endItem: Math.min(currentPage * limit, totalItems),
+    startItem: totalItems === 0 ? 0 : (currentPage - 1) * limit + 1,
+    endItem: totalItems === 0 ? 0 : Math.min(currentPage * limit, totalItems),
   };
 }
 

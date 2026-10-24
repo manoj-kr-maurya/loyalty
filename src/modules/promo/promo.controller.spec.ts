@@ -7,7 +7,7 @@ import { CouponBlock } from './coupon-manager.service';
 import { ClaimRecord } from './claim-manager.service';
 import { PromotionRecord } from './promotion-repository.service';
 import { ConfigService } from '@nestjs/config';
-import { ApiKeyGuard } from 'src/common/guards/api-key.guard';
+import { OrganizationApiKeyGuard } from 'src/modules/auth/guards/organization-api-key.guard';
 
 describe('PromoController', () => {
   let controller: PromoController;
@@ -184,14 +184,11 @@ describe('PromoController', () => {
             getCodeByCustomer: jest.fn().mockResolvedValue(null),
           }),
         },
-        {
-          provide: ApiKeyGuard,
-          useFactory: () => ({
-            canActivate: jest.fn().mockReturnValue(true),
-          }),
-        },
       ],
-    }).compile();
+    })
+      .overrideGuard(OrganizationApiKeyGuard)
+      .useValue({ canActivate: jest.fn().mockReturnValue(true) })
+      .compile();
 
     controller = module.get<PromoController>(PromoController);
     promoService = module.get(PromoService);

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { CreateOrderDto, UpdateOrderDto } from './DTO/organizationOrder.dto';
 import {
   OrganizationOrder,
@@ -22,6 +22,21 @@ export class OrganizationOrderService {
     createOrderDto: CreateOrderDto,
     prismaTransaction?: Prisma.TransactionClient, // Optional prismaTransaction
   ): Promise<OrganizationOrder> {
+    if (
+      createOrderDto.orderType === OrganizationOrderType.CURRENCY_PURCHASE &&
+      (!createOrderDto.amount || createOrderDto.amount <= 0)
+    ) {
+      throw new BadRequestException(
+        'A positive amount is required for a currency purchase',
+      );
+    }
+    if (
+      createOrderDto.orderType === OrganizationOrderType.CURRENCY_PURCHASE &&
+      !(createOrderDto.details as { currencyCode?: string })?.currencyCode
+    ) {
+      throw new BadRequestException('details.currencyCode is required');
+    }
+
     const transactionId =
       this.commonUtilsService.generateNewUniqueTransactionId('organization');
 
@@ -29,7 +44,7 @@ export class OrganizationOrderService {
     const newOrder =
       await this.organizationOrderPrismaHelperService.createOrganizationOrder(
         {
-          orderType: OrganizationOrderType.CURRENCY_PURCHASE,
+          orderType: createOrderDto.orderType,
           transactionId,
           amount: createOrderDto.amount,
           orderStatus: OrganizationOrderStatus.PENDING,
@@ -82,12 +97,39 @@ export class OrganizationOrderService {
     };
   }
 
-  async getOrganizationOrder(orderId: string) {
+  async getOrganizationOrder(orderId: string, organizationId: string) {
     const orgOrder =
-      await this.organizationOrderPrismaHelperService.findOrganizationOrder({
+      await this.organizationOrderPrismaHelperService.findOrganizationOrders({
         id: orderId,
+        organizationId,
       });
-    return orgOrder;
+    if (orgOrder.length === 0) {
+      throw new NotFoundException(`Order ${orderId} not found`);
+    }
+    return orgOrder[0];
+  }
+
+  async updateOrganizationOrderForOrganization(
+    orderId: string,
+    organizationId: string,
+    updateOrderDto: UpdateOrderDto,
+  ) {
+    const order = await this.getOrganizationOrder(orderId, organizationId);
+    const terminalStatuses: OrganizationOrderStatus[] = [
+      OrganizationOrderStatus.COMPLETED,
+      OrganizationOrderStatus.CANCELLED,
+      OrganizationOrderStatus.FAILED,
+    ];
+    if (
+      terminalStatuses.includes(order.orderStatus) &&
+      updateOrderDto.newStatus &&
+      updateOrderDto.newStatus !== order.orderStatus
+    ) {
+      throw new BadRequestException(
+        `Order is already ${order.orderStatus} and cannot be changed`,
+      );
+    }
+    return this.updateOrganizationOrder(orderId, updateOrderDto);
   }
 
   async updateOrganizationOrder(

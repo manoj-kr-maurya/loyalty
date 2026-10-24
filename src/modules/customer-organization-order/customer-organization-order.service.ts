@@ -116,25 +116,33 @@ export class CustomerOrganizationOrderService {
 
     // If coins are being burned, confirm the burning details
     if (isThereACoin) {
-      await this.confirmBurningDetails(customerId, form.burningAmountDetails);
+      await this.confirmBurningDetails(
+        customerId,
+        form.organizationId,
+        form.burningAmountDetails,
+      );
     }
     const organization = await this.organizationService.getOrganization(
       form.organizationId,
     );
-    let potentialEarningFromActiveCampaigns;
-    if (organization.role === OrganizationRoles.ADMIN) {
+    if (!organization) {
+      throw new BadRequestException('Organization not found');
+    }
+    const cashAmount = form.burningAmountDetails.cash?.amount ?? 0;
+    let potentialEarningFromActiveCampaigns: any[] = [];
+    if (cashAmount > 0 && organization.role === OrganizationRoles.ADMIN) {
       potentialEarningFromActiveCampaigns =
         await this.campaignService.getActiveCampaignOfOrganizationAndTheirPotentialEarning(
           {
-            realAmount: form.burningAmountDetails.cash.amount,
+            realAmount: cashAmount,
             organizationId: form.organizationId,
           },
         );
-    } else if (organization.role === OrganizationRoles.SHOP) {
+    } else if (cashAmount > 0 && organization.role === OrganizationRoles.SHOP) {
       potentialEarningFromActiveCampaigns =
         await this.campaignService.getActiveCampaignOfOrganizationAndTheirPotentialEarning(
           {
-            realAmount: form.burningAmountDetails.cash.amount,
+            realAmount: cashAmount,
             organizationId: organization.orgAdminId,
           },
         );
@@ -143,7 +151,7 @@ export class CustomerOrganizationOrderService {
       potentialEarningFromActiveCampaigns,
     );
 
-    return await this.prismaService.$transaction(async () => {
+    return await this.prismaService.$transaction(async (tx) => {
       const newOrder =
         await this.customerOrganizationOrderPrismaHelperService.createCustomerOrganizationOrder(
           {
@@ -155,9 +163,13 @@ export class CustomerOrganizationOrderService {
             customerBurningAmountDetail: {
               create: {
                 totalAmount: form.burningAmountDetails.totalAmount,
-                cash: {
-                  create: { amount: form.burningAmountDetails.cash.amount },
-                },
+                ...(form.burningAmountDetails.cash && {
+                  cash: {
+                    create: {
+                      amount: form.burningAmountDetails.cash.amount,
+                    },
+                  },
+                }),
                 ...(isThereACoin && {
                   coin: {
                     createMany: { data: form.burningAmountDetails.coin },
@@ -180,6 +192,7 @@ export class CustomerOrganizationOrderService {
               ],
             },
           },
+          tx as any,
         );
 
       if (isThereACoin) {
@@ -187,6 +200,7 @@ export class CustomerOrganizationOrderService {
           customerId,
           form.burningAmountDetails.coin,
           newOrder.id,
+          tx as any,
         );
       }
       if (potentialEarningFromActiveCampaigns.length > 0) {
@@ -196,7 +210,7 @@ export class CustomerOrganizationOrderService {
               await this.customerWalletService.initialize(
                 customerId,
                 item.currencyCode,
-                this.prismaService,
+                tx as any,
               );
             await initializedCustomerPointForEarning.addPendingPoints({
               currencyCode: item.currencyCode,
@@ -226,15 +240,27 @@ export class CustomerOrganizationOrderService {
   private validateBurningAmountDetails(
     burningDetails: CustomerBurningAmountDetailDto,
   ): void {
-    // Calculate the total from individual components
-    let calculatedTotal = burningDetails.cash.amount;
+    if (burningDetails.totalAmount <= 0) {
+      throw new InvalidAmountException(0, burningDetails as any);
+    }
+
+    // Calculate the total from individual components. Cash is optional for
+    // coin-only redemptions.
+    let calculatedTotal = burningDetails.cash?.amount ?? 0;
 
     // Add coin amounts if present
     if (burningDetails.coin && burningDetails.coin.length > 0) {
       for (const coin of burningDetails.coin) {
+        if (coin.amount <= 0) {
+          throw new InvalidAmountException(calculatedTotal, burningDetails as any);
+        }
         // Currently each coin is valued at 1 INR
         calculatedTotal += coin.amount;
       }
+    }
+
+    if (calculatedTotal <= 0) {
+      throw new InvalidAmountException(calculatedTotal, burningDetails as any);
     }
 
     // Validate that the provided total matches the calculated total
@@ -242,24 +268,42 @@ export class CustomerOrganizationOrderService {
       throw new InvalidAmountException(calculatedTotal, {
         ...burningDetails,
         cash: { amount: burningDetails?.cash?.amount || 0 },
-      });
+      } as any);
     }
   }
 
   private async confirmBurningDetails(
     customerId: string,
+    organizationId: string,
     burningAmountDetails: CustomerBurningAmountDetailDto,
   ) {
+    const coins = burningAmountDetails.coin ?? [];
+    const orgCurrencies = await this.prismaService.currency.findMany({
+      where: {
+        organizationId,
+        code: { in: coins.map((element) => element.currencyCode) },
+      },
+      select: { code: true },
+    });
+    const orgCurrencyCodes = new Set(
+      orgCurrencies.map((currency) => currency.code),
+    );
+    if (coins.some((coin) => !orgCurrencyCodes.has(coin.currencyCode))) {
+      throw new BadRequestException(
+        'Burning currency does not belong to this organization',
+      );
+    }
+
     const customerPoints = await this.prismaService.customerWallet.findMany({
       where: {
         customerId,
         currencyCode: {
-          in: burningAmountDetails.coin.map((element) => element.currencyCode),
+          in: coins.map((element) => element.currencyCode),
         },
       },
     });
 
-    const insufficientPoints = burningAmountDetails.coin.filter((coin) => {
+    const insufficientPoints = coins.filter((coin) => {
       const customerPoint = customerPoints.find(
         (point) => point.currencyCode === coin.currencyCode,
       );
@@ -308,6 +352,7 @@ export class CustomerOrganizationOrderService {
     customerId: string,
     burningCoins: BurningCoinAmountDetailsDto[],
     orderId: string,
+    prismaClient?: PrismaService,
   ) {
     await Promise.all(
       burningCoins.map(async (coin) => {
@@ -316,7 +361,7 @@ export class CustomerOrganizationOrderService {
             await this.customerWalletService.initialize(
               customerId,
               coin.currencyCode,
-              this.prismaService,
+              prismaClient,
             );
           const customerBlockPointsPayload: CustomerBlockPoints = {
             customerId,
@@ -345,6 +390,7 @@ export class CustomerOrganizationOrderService {
 
   async fetchOrganizationCustomerOrdersPerCustomer(
     customerId: string,
+    organizationId: string,
     query: FetchCustomerOrdersForCustomerQueryParams,
   ) {
     const { page = 1, limit = 10, search } = query;
@@ -354,6 +400,7 @@ export class CustomerOrganizationOrderService {
     // Build where condition with search
     const where: Prisma.CustomerOrganizationOrderWhereInput = {
       customerId,
+      organizationId,
       ...(search && {
         OR: [
           { id: { contains: search, mode: 'insensitive' } },
@@ -462,10 +509,11 @@ export class CustomerOrganizationOrderService {
     };
   }
 
-  async fetchPotentialOrder(id: string) {
+  async fetchPotentialOrder(id: string, organizationId: string) {
     return await this.customerOrganizationOrderPrismaHelperService.findCustomerOrganizationOrder(
       {
         id,
+        organizationId,
       },
     );
   }
@@ -485,6 +533,9 @@ export class CustomerOrganizationOrderService {
     const organization = await this.organizationService.getOrganization(
       organizationId,
     );
+    if (!organization) {
+      throw new BadRequestException('Organization not found');
+    }
 
     // Determine which organizations to fetch orders for
     const whereCondition: Prisma.CustomerOrganizationOrderWhereInput = {};
@@ -494,16 +545,20 @@ export class CustomerOrganizationOrderService {
       whereCondition.organizationId = organizationId;
     } else {
       // For non-shop roles
+      const shops =
+        await this.organizationService.getInvitedShopsAsOrganizationData(
+          organizationId,
+        );
+      const shopIds = [...shops.map((shop) => shop.id), organizationId];
+
       if (query.shopId) {
-        // If specific shop is selected, fetch for that shop only
+        if (!shopIds.includes(query.shopId)) {
+          throw new ForbiddenException(
+            'You are not authorized to view this shop',
+          );
+        }
         whereCondition.organizationId = query.shopId;
       } else {
-        // Get all invited shops and include current organization
-        const shops =
-          await this.organizationService.getInvitedShopsAsOrganizationData(
-            organizationId,
-          );
-        const shopIds = [...shops.map((shop) => shop.id), organizationId];
         whereCondition.organizationId = { in: shopIds };
       }
     }

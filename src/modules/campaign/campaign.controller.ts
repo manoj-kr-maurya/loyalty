@@ -6,28 +6,32 @@ import {
   Post,
   Query,
   UseGuards,
-  UsePipes,
 } from '@nestjs/common';
 import { CampaignService } from './campaign.service';
 import { CallStatuses } from 'src/common/enums/status-codes';
 import { CampaignResponseCodes } from './enums/responseCodes';
 import { ApiSecurity, ApiTags } from '@nestjs/swagger';
-import { ApiKeyGuard } from 'src/common/guards/api-key.guard';
-import { JoiValidationPipe } from 'src/common/pipes/joi-validation.pipe';
+import { OrganizationApiKeyGuard } from 'src/modules/auth/guards/organization-api-key.guard';
+import { CurrentAuth } from 'src/modules/auth/decorators/current-auth.decorator';
+import { OrganizationAuthContext } from 'src/modules/auth/api-key.service';
+import { resolveOrganizationId } from 'src/modules/auth/resolve-organization-id';
 import { CreateOrEditOrganizationCampaignForm } from './DTO/campaign.dto';
 
 @ApiTags('Campaign')
 @ApiSecurity('x-api-key')
-@UseGuards(ApiKeyGuard)
+@UseGuards(OrganizationApiKeyGuard)
 @Controller('campaign')
 export class CampaignController {
   constructor(private readonly campaignService: CampaignService) {}
 
   @Post('/create-organization-level-campaign')
   async create_organization_level_campaign(
-    @Body() form: CreateOrEditOrganizationCampaignForm & { organizationId: string },
+    @Body()
+    form: CreateOrEditOrganizationCampaignForm & { organizationId?: string },
+    @CurrentAuth() auth: OrganizationAuthContext,
   ): Promise<{ status: CallStatuses; code: CampaignResponseCodes; data: any }> {
-    const { organizationId, ...data } = form;
+    const { organizationId: requestedOrganizationId, ...data } = form;
+    const organizationId = resolveOrganizationId(auth, requestedOrganizationId);
     const result = await this.campaignService.createOrganizationLevelCampaign(
       data as any,
       organizationId,
@@ -42,9 +46,11 @@ export class CampaignController {
   @Get('/get-organization-level-campaigns')
   async get_organization_level_campaigns(
     @Query('organizationId') organizationId: string,
+    @CurrentAuth() auth: OrganizationAuthContext,
   ): Promise<{ status: CallStatuses; code: CampaignResponseCodes; data: any }> {
+    const effectiveOrganizationId = resolveOrganizationId(auth, organizationId);
     const data = await this.campaignService.getOrganizationLevelCampaigns(
-      organizationId,
+      effectiveOrganizationId,
     );
     return {
       status: CallStatuses.Success,
@@ -57,9 +63,11 @@ export class CampaignController {
   async get_organization_level_campaign(
     @Query('organizationId') organizationId: string,
     @Param('id') id: string,
+    @CurrentAuth() auth: OrganizationAuthContext,
   ): Promise<{ status: CallStatuses; code: CampaignResponseCodes; data: any }> {
+    const effectiveOrganizationId = resolveOrganizationId(auth, organizationId);
     const data = await this.campaignService.getOrganizationLevelCampaign(
-      organizationId,
+      effectiveOrganizationId,
       id,
     );
     return {
@@ -71,9 +79,12 @@ export class CampaignController {
 
   @Post('/update-organization-level-campaign')
   async update_organization_level_campaign(
-    @Body() form: CreateOrEditOrganizationCampaignForm & { organizationId: string },
+    @Body()
+    form: CreateOrEditOrganizationCampaignForm & { organizationId?: string },
+    @CurrentAuth() auth: OrganizationAuthContext,
   ): Promise<{ status: CallStatuses; code: CampaignResponseCodes; data: any }> {
-    const { organizationId, ...data } = form;
+    const { organizationId: requestedOrganizationId, ...data } = form;
+    const organizationId = resolveOrganizationId(auth, requestedOrganizationId);
     const result = await this.campaignService.updateOrganizationLevelCampaign(
       data as any,
       organizationId,
@@ -88,10 +99,12 @@ export class CampaignController {
   @Post('/get-active-campaigns-potential-earning')
   async getActiveCampaignOfOrganizationAndTheirPotentialEarning(
     @Body() form: any,
+    @CurrentAuth() auth: OrganizationAuthContext,
   ): Promise<{ status: CallStatuses; code: CampaignResponseCodes; data: any }> {
+    const organizationId = resolveOrganizationId(auth, form.organizationId);
     const data =
       await this.campaignService.getActiveCampaignOfOrganizationAndTheirPotentialEarning(
-        form,
+        { ...form, organizationId },
       );
     return {
       status: CallStatuses.Success,

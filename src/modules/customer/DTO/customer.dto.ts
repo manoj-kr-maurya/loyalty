@@ -42,12 +42,12 @@ export const OtpPhoneFindOrCreateSchema = Joi.object({
 });
 
 export const OtpValidateOtpSchema = Joi.object({
-  id: Joi.string().optional(),
+  id: Joi.string().required(),
   otp: Joi.string().required(),
 });
 
 export const UpdateCustomerSchema = Joi.object({
-  customerId: Joi.string().optional(),
+  customerId: Joi.string().required(),
   name: Joi.string().optional(),
   base64Logo: Joi.string().optional(),
 }).unknown(true);

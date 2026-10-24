@@ -9,12 +9,14 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiSecurity, ApiTags } from '@nestjs/swagger';
-import { ApiKeyGuard } from 'src/common/guards/api-key.guard';
+import { OrganizationApiKeyGuard } from 'src/modules/auth/guards/organization-api-key.guard';
+import { ScopesGuard } from 'src/modules/auth/guards/scopes.guard';
+import { RequireScopes } from 'src/modules/auth/decorators/require-scopes.decorator';
 import { ValueExchangeEngineService } from './value-exchange-engine.service';
 
 @ApiTags('engines-value-exchange')
 @ApiSecurity('x-api-key')
-@UseGuards(ApiKeyGuard)
+@UseGuards(OrganizationApiKeyGuard, ScopesGuard)
 @Controller('engines/value-exchange')
 export class ValueExchangeEngineController {
   constructor(private readonly valueExchange: ValueExchangeEngineService) {}
@@ -22,6 +24,7 @@ export class ValueExchangeEngineController {
   // ─── Agreement CRUD ───────────────────────────────────
 
   @Post('agreements')
+  @RequireScopes('exchange:write')
   @HttpCode(HttpStatus.CREATED)
   async createAgreement(@Body() body: {
     sourceEntityId: string;
@@ -49,6 +52,7 @@ export class ValueExchangeEngineController {
   }
 
   @Get('agreements/:sourceEntityId')
+  @RequireScopes('exchange:read')
   async getAgreements(@Param('sourceEntityId') sourceEntityId: string) {
     return this.valueExchange.getAgreements(sourceEntityId);
   }
@@ -56,6 +60,7 @@ export class ValueExchangeEngineController {
   // ─── Quote ────────────────────────────────────────────
 
   @Post('quote')
+  @RequireScopes('exchange:read')
   @HttpCode(HttpStatus.OK)
   async getQuote(@Body() body: {
     agreementId: string;
@@ -69,6 +74,7 @@ export class ValueExchangeEngineController {
   // ─── Execute ──────────────────────────────────────────
 
   @Post('execute')
+  @RequireScopes('exchange:write')
   @HttpCode(HttpStatus.OK)
   async execute(@Body() body: {
     quoteId: string;
@@ -81,6 +87,7 @@ export class ValueExchangeEngineController {
   // ─── Reverse ──────────────────────────────────────────
 
   @Post('reverse')
+  @RequireScopes('exchange:write')
   @HttpCode(HttpStatus.OK)
   async reverse(@Body() body: {
     orderId: string;
@@ -93,6 +100,7 @@ export class ValueExchangeEngineController {
   // ─── History ──────────────────────────────────────────
 
   @Get('orders/:sourceCustomerId/:sourceEntityId')
+  @RequireScopes('exchange:read')
   async getOrderHistory(
     @Param('sourceCustomerId') sourceCustomerId: string,
     @Param('sourceEntityId') sourceEntityId: string,

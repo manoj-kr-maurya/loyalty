@@ -101,6 +101,7 @@ export interface ExpirePointsInput {
 export interface LoyaltyStatementInput {
   customerId: string;
   organizationId: string;
+  currencyCode?: string;
   periodStart: Date;
   periodEnd: Date;
 }
@@ -516,6 +517,17 @@ export class LoyaltyEngineService {
   }> {
     const { organizationId, currencyCode } = input;
 
+    const expiryDate =
+      input.expiryDate instanceof Date
+        ? input.expiryDate
+        : new Date(input.expiryDate);
+    if (Number.isNaN(expiryDate.getTime())) {
+      throw new CommonException(
+        'expiryDate must be a valid date',
+        StatusCodes.BAD_REQUEST,
+      );
+    }
+
     const currency = await this.prisma.currency.findUnique({
       where: { code: currencyCode },
       select: { organizationId: true },
@@ -533,29 +545,30 @@ export class LoyaltyEngineService {
         currencyCode,
         availableBalance: { gt: 0 },
       },
+      select: { customerId: true },
     });
 
     let expiredCount = 0;
     let totalExpiredPoints = 0;
 
     for (const wallet of wallets) {
-      const expireAmount = Math.floor(wallet.availableBalance * 0.1);
+      const result = await this.prisma.$transaction((tx) =>
+        this.walletLedger.expirePockets(tx, {
+          customerId: wallet.customerId,
+          organizationId,
+          currencyCode,
+          asOf: expiryDate,
+        }),
+      );
 
-      if (expireAmount > 0) {
-        await this.prisma.customerWallet.update({
-          where: { id: wallet.id },
-          data: {
-            availableBalance: { decrement: expireAmount },
-            expiredBalance: { increment: expireAmount },
-          },
-        });
+      if (result.expiredPoints > 0) {
         expiredCount++;
-        totalExpiredPoints += expireAmount;
+        totalExpiredPoints += result.expiredPoints;
       }
     }
 
     this.logger.log(
-      `Expiry: org=${organizationId} currency=${currencyCode} wallets=${expiredCount} points=${totalExpiredPoints}`,
+      `Expiry: org=${organizationId} currency=${currencyCode} asOf=${expiryDate.toISOString()} wallets=${expiredCount} points=${totalExpiredPoints}`,
     );
 
     return {
@@ -571,6 +584,7 @@ export class LoyaltyEngineService {
   async generateStatement(input: LoyaltyStatementInput): Promise<{
     customerId: string;
     organizationId: string;
+    currencyCode: string;
     periodStart: Date;
     periodEnd: Date;
     openingBalance: number;
@@ -583,67 +597,150 @@ export class LoyaltyEngineService {
   }> {
     const { customerId, organizationId, periodStart, periodEnd } = input;
 
-    const wallet = await this.prisma.customerWallet.findFirst({
-      where: { customerId },
-    });
-
-    const customerTier = await this.prisma.customerTier.findUnique({
-      where: { customerId_organizationId: { customerId, organizationId } },
-      include: { tier: true },
-    });
-
-    const existing = await this.prisma.loyaltyStatement.findFirst({
-      where: {
-        customerId,
-        organizationId,
-        periodStart,
-        periodEnd,
-      },
-    });
-
-    if (existing) {
-      return {
-        customerId,
-        organizationId,
-        periodStart: existing.periodStart,
-        periodEnd: existing.periodEnd,
-        openingBalance: existing.openingBalance,
-        earnedPoints: existing.earnedPoints,
-        redeemedPoints: existing.redeemedPoints,
-        expiredPoints: existing.expiredPoints,
-        closingBalance: existing.closingBalance,
-        tierAtStart: existing.tierAtStart,
-        tierAtEnd: existing.tierAtEnd,
-      };
+    if (
+      Number.isNaN(periodStart.getTime()) ||
+      Number.isNaN(periodEnd.getTime())
+    ) {
+      throw new CommonException(
+        'periodStart and periodEnd must be valid dates',
+        StatusCodes.BAD_REQUEST,
+      );
+    }
+    if (periodStart > periodEnd) {
+      throw new CommonException(
+        'periodStart must be before or equal to periodEnd',
+        StatusCodes.BAD_REQUEST,
+      );
     }
 
-    const openingBalance = wallet
-      ? wallet.availableBalance + wallet.usedBalance
-      : 0;
-    const earnedPoints = 0;
-    const redeemedPoints = wallet?.usedBalance || 0;
-    const expiredPoints = wallet?.expiredBalance || 0;
-    const closingBalance = wallet?.availableBalance || 0;
+    const currency = input.currencyCode
+      ? await this.prisma.currency.findUnique({
+          where: { code: input.currencyCode },
+          select: { code: true, organizationId: true },
+        })
+      : await this.prisma.currency.findFirst({
+          where: { organizationId },
+          orderBy: { code: 'asc' },
+          select: { code: true, organizationId: true },
+        });
 
-    const statement = await this.prisma.loyaltyStatement.create({
-      data: {
-        customerId,
-        organizationId,
-        periodStart,
-        periodEnd,
-        openingBalance,
-        earnedPoints,
-        redeemedPoints,
-        expiredPoints,
-        closingBalance,
-        tierAtStart: customerTier?.tier?.name || null,
-        tierAtEnd: customerTier?.tier?.name || null,
-      },
-    });
+    if (!currency || currency.organizationId !== organizationId) {
+      throw new CommonException(
+        'A currency owned by the organization is required for a statement',
+        StatusCodes.BAD_REQUEST,
+      );
+    }
 
-    return {
+    const currencyCode = currency.code;
+
+    const [wallet, order, customerTier, opening, period, earned, burned, expired] =
+      await Promise.all([
+        this.prisma.customerWallet.findUnique({
+          where: {
+            customer_id_currency_code: { customerId, currencyCode },
+          },
+        }),
+        this.prisma.customerOrganizationOrder.findFirst({
+          where: { customerId, organizationId },
+          select: { id: true },
+        }),
+        this.prisma.customerTier.findUnique({
+          where: { customerId_organizationId: { customerId, organizationId } },
+          include: { tier: true },
+        }),
+        this.prisma.loyaltyLedgerEntry.aggregate({
+          where: {
+            customerId,
+            organizationId,
+            currencyCode,
+            createdAt: { lt: periodStart },
+          },
+          _sum: { points: true },
+        }),
+        this.prisma.loyaltyLedgerEntry.aggregate({
+          where: {
+            customerId,
+            organizationId,
+            currencyCode,
+            createdAt: { gte: periodStart, lte: periodEnd },
+          },
+          _sum: { points: true },
+        }),
+        this.prisma.loyaltyLedgerEntry.aggregate({
+          where: {
+            customerId,
+            organizationId,
+            currencyCode,
+            type: LoyaltyLedgerType.EARN,
+            createdAt: { gte: periodStart, lte: periodEnd },
+          },
+          _sum: { points: true },
+        }),
+        this.prisma.loyaltyLedgerEntry.aggregate({
+          where: {
+            customerId,
+            organizationId,
+            currencyCode,
+            type: LoyaltyLedgerType.BURN,
+            createdAt: { gte: periodStart, lte: periodEnd },
+          },
+          _sum: { points: true },
+        }),
+        this.prisma.loyaltyLedgerEntry.aggregate({
+          where: {
+            customerId,
+            organizationId,
+            currencyCode,
+            type: LoyaltyLedgerType.EXPIRE,
+            createdAt: { gte: periodStart, lte: periodEnd },
+          },
+          _sum: { points: true },
+        }),
+      ]);
+
+    if (!wallet && !order) {
+      throw new CommonException(
+        'Customer has no loyalty activity in this organization',
+        StatusCodes.NOT_FOUND,
+      );
+    }
+
+    const openingBalance = opening._sum.points ?? 0;
+    const earnedPoints = Math.max(0, earned._sum.points ?? 0);
+    const redeemedPoints = Math.abs(burned._sum.points ?? 0);
+    const expiredPoints = Math.abs(expired._sum.points ?? 0);
+    const closingBalance = openingBalance + (period._sum.points ?? 0);
+
+    const tierName = customerTier?.tier?.name ?? null;
+    const payload = {
       customerId,
       organizationId,
+      periodStart,
+      periodEnd,
+      openingBalance,
+      earnedPoints,
+      redeemedPoints,
+      expiredPoints,
+      closingBalance,
+      tierAtStart: tierName,
+      tierAtEnd: tierName,
+    };
+
+    const existing = await this.prisma.loyaltyStatement.findFirst({
+      where: { customerId, organizationId, periodStart, periodEnd },
+    });
+
+    const statement = existing
+      ? await this.prisma.loyaltyStatement.update({
+          where: { id: existing.id },
+          data: payload,
+        })
+      : await this.prisma.loyaltyStatement.create({ data: payload });
+
+    return {
+      customerId: statement.customerId,
+      organizationId: statement.organizationId,
+      currencyCode,
       periodStart: statement.periodStart,
       periodEnd: statement.periodEnd,
       openingBalance: statement.openingBalance,

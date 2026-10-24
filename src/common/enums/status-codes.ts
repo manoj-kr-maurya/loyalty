@@ -25,6 +25,7 @@ export const StatusCodes = {
   UNAUTHORIZED: HttpStatus.UNAUTHORIZED,
   FORBIDDEN: HttpStatus.FORBIDDEN,
   UNPROCESSABLE_ENTITY: HttpStatus.UNPROCESSABLE_ENTITY,
+  SERVICE_UNAVAILABLE: HttpStatus.SERVICE_UNAVAILABLE,
 } as const;
 
 export type StatusCodes = (typeof StatusCodes)[keyof typeof StatusCodes];

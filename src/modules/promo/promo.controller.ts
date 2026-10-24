@@ -15,7 +15,7 @@ import {
   ApiQuery,
   ApiSecurity,
 } from '@nestjs/swagger';
-import { ApiKeyGuard } from 'src/common/guards/api-key.guard';
+import { OrganizationApiKeyGuard } from 'src/modules/auth/guards/organization-api-key.guard';
 import { JoiValidationPipe } from 'src/common/pipes/joi-validation.pipe';
 import { buildSchemaForOrg } from 'src/common/validation/validation-policies';
 import {
@@ -38,10 +38,15 @@ import {
 } from './DTO/promotion.dto';
 import { CouponAllocation, CouponClaim } from './coupon-manager.service';
 import { ClaimInput } from './claim-manager.service';
+import { DeprecatedApi } from 'src/interceptors/deprecation/deprecated-api.decorator';
 
 @ApiTags('Promo')
 @ApiSecurity('x-api-key')
-@UseGuards(ApiKeyGuard)
+@DeprecatedApi({
+  sunset: '2027-06-30T00:00:00Z',
+  replacement: '/engines/promo',
+})
+@UseGuards(OrganizationApiKeyGuard)
 @Controller('promo')
 export class PromoController {
   constructor(

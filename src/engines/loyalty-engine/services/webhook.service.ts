@@ -6,6 +6,10 @@ import { CommonException } from 'src/common/exceptions/common.exception';
 import { CallStatuses, StatusCodes } from 'src/common/enums/status-codes';
 import { getPaginationMetadata } from 'src/common/utils/pagination.util';
 import {
+  assertSafeWebhookUrl,
+  encryptWebhookSecret,
+} from './webhook-security.util';
+import {
   CreateWebhookDto,
   WebhookDeliveryQueryDto,
   WebhookEndpointQueryDto,
@@ -31,7 +35,7 @@ export class WebhookService {
   constructor(private readonly prisma: PrismaService) {}
 
   async createEndpoint(input: CreateWebhookDto) {
-    this.assertSafeUrl(input.url);
+    assertSafeWebhookUrl(input.url);
 
     if (input.secret && input.secret.length < MIN_SECRET_LENGTH) {
       throw new CommonException(
@@ -40,11 +44,12 @@ export class WebhookService {
       );
     }
 
+    const secret = input.secret ?? randomBytes(32).toString('hex');
     const endpoint = await this.prisma.loyaltyWebhookEndpoint.create({
       data: {
         organizationId: input.organizationId,
         url: input.url,
-        secret: input.secret ?? randomBytes(32).toString('hex'),
+        secret: encryptWebhookSecret(secret),
         events: input.events ?? [],
         description: input.description,
         isActive: input.isActive ?? true,
@@ -55,7 +60,7 @@ export class WebhookService {
       `Webhook endpoint ${endpoint.id} registered for org ${input.organizationId}`,
     );
 
-    return endpoint;
+    return { ...endpoint, secret };
   }
 
   async listEndpoints(query: WebhookEndpointQueryDto) {
@@ -133,47 +138,5 @@ export class WebhookService {
       data: deliveries,
       metadata,
     };
-  }
-
-  /**
-   * Rejects non-HTTP protocols everywhere and private/loopback destinations in
-   * production, preventing the webhook registry from becoming an SSRF pivot.
-   */
-  private assertSafeUrl(raw: string): void {
-    let url: URL;
-    try {
-      url = new URL(raw);
-    } catch {
-      throw new CommonException('Invalid webhook URL', StatusCodes.BAD_REQUEST);
-    }
-
-    if (!['http:', 'https:'].includes(url.protocol)) {
-      throw new CommonException(
-        'Webhook URL must use http or https',
-        StatusCodes.BAD_REQUEST,
-      );
-    }
-
-    if (process.env.NODE_ENV !== 'production') return;
-
-    const hostname = url.hostname.toLowerCase().replace(/^\[|\]$/g, '');
-    const isPrivate =
-      hostname === 'localhost' ||
-      hostname.endsWith('.localhost') ||
-      hostname.endsWith('.local') ||
-      hostname === '::1' ||
-      hostname === '0.0.0.0' ||
-      /^127\./.test(hostname) ||
-      /^10\./.test(hostname) ||
-      /^192\.168\./.test(hostname) ||
-      /^169\.254\./.test(hostname) ||
-      /^172\.(1[6-9]|2\d|3[01])\./.test(hostname);
-
-    if (isPrivate) {
-      throw new CommonException(
-        'Webhook URL must resolve to a public address',
-        StatusCodes.BAD_REQUEST,
-      );
-    }
   }
 }

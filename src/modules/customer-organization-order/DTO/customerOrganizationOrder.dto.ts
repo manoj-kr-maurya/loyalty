@@ -60,21 +60,22 @@ export class CreateCustomerOrganizationOrderDto {
 }
 
 export const BurningCashSchema = Joi.object({
-  amount: Joi.number().required(),
+  amount: Joi.number().positive().required(),
 });
 
 export const BurningCoinSchema = Joi.object({
   currencyCode: Joi.string().required(),
-  amount: Joi.number().required(),
+  amount: Joi.number().positive().required(),
 });
 
 export const BurningAmountDetailSchema = Joi.object({
   cash: BurningCashSchema.optional(),
   coin: Joi.array().items(BurningCoinSchema).optional(),
-  totalAmount: Joi.number().required(),
+  totalAmount: Joi.number().positive().required(),
 });
 
 export const CreateOrderSchema = Joi.object({
+  customerId: Joi.string().required(),
   organizationId: Joi.string().optional(),
   burningAmountDetails: BurningAmountDetailSchema.required(),
   details: Joi.any().optional(),

@@ -23,11 +23,12 @@ import {
 } from 'src/modules/organization/DTO/organization-response.dto';
 import { InviteAdminForm } from './DTO/admin.dto';
 import { AdminResponseCodes } from './enums/responseCodes';
-import { ApiKeyGuard } from 'src/common/guards/api-key.guard';
+import { PlatformAdminGuard } from 'src/modules/auth/guards/platform-admin.guard';
+import { withoutToken } from 'src/common/utils/redact.util';
 
 @ApiTags('Admin')
 @ApiSecurity('x-api-key')
-@UseGuards(ApiKeyGuard)
+@UseGuards(PlatformAdminGuard)
 @Controller('admin')
 export class AdminController {
   constructor(private readonly adminService: AdminService) {}
@@ -78,7 +79,7 @@ export class AdminController {
     const organization = await this.adminService.fetchOrganizationById(id);
     return {
       status: CallStatuses.Success,
-      data: organization,
+      data: withoutToken(organization),
     };
   }
 
@@ -87,7 +88,7 @@ export class AdminController {
     const customer = await this.adminService.fetchCustomerById(id);
     return {
       status: CallStatuses.Success,
-      data: customer,
+      data: withoutToken(customer),
     };
   }
 

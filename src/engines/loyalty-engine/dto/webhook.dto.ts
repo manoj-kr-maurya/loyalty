@@ -6,6 +6,7 @@ import {
   IsArray,
   IsBoolean,
   IsEnum,
+  IsIn,
   IsInt,
   IsNotEmpty,
   IsOptional,
@@ -24,10 +25,15 @@ export const LOYALTY_WEBHOOK_EVENTS = [
 ] as const;
 
 export class CreateWebhookDto {
-  @ApiProperty({ example: '9a8b7c6d-...' })
+  @ApiPropertyOptional({
+    example: '9a8b7c6d-...',
+    description:
+      'Required for platform keys; ignored for organization-scoped keys.',
+  })
+  @IsOptional()
   @IsString()
   @IsNotEmpty()
-  organizationId: string;
+  organizationId?: string;
 
   @ApiProperty({ example: 'https://example.com/hooks/loyalty' })
   @IsUrl({
@@ -46,6 +52,7 @@ export class CreateWebhookDto {
   @IsArray()
   @ArrayMaxSize(50)
   @IsString({ each: true })
+  @IsIn(LOYALTY_WEBHOOK_EVENTS, { each: true })
   events?: string[];
 
   @ApiPropertyOptional({ example: 'Production CRM sync' })
@@ -68,17 +75,27 @@ export class CreateWebhookDto {
 }
 
 export class OrganizationQueryDto {
-  @ApiProperty({ example: '9a8b7c6d-...' })
+  @ApiPropertyOptional({
+    example: '9a8b7c6d-...',
+    description:
+      'Required for platform keys; ignored for organization-scoped keys.',
+  })
+  @IsOptional()
   @IsString()
   @IsNotEmpty()
-  organizationId: string;
+  organizationId?: string;
 }
 
 export class WebhookEndpointQueryDto {
-  @ApiProperty({ example: '9a8b7c6d-...' })
+  @ApiPropertyOptional({
+    example: '9a8b7c6d-...',
+    description:
+      'Required for platform keys; ignored for organization-scoped keys.',
+  })
+  @IsOptional()
   @IsString()
   @IsNotEmpty()
-  organizationId: string;
+  organizationId?: string;
 
   @ApiPropertyOptional({ default: false })
   @IsOptional()
@@ -88,10 +105,15 @@ export class WebhookEndpointQueryDto {
 }
 
 export class WebhookDeliveryQueryDto {
-  @ApiProperty({ example: '9a8b7c6d-...' })
+  @ApiPropertyOptional({
+    example: '9a8b7c6d-...',
+    description:
+      'Required for platform keys; ignored for organization-scoped keys.',
+  })
+  @IsOptional()
   @IsString()
   @IsNotEmpty()
-  organizationId: string;
+  organizationId?: string;
 
   @ApiPropertyOptional({ example: '3f2e1d4c-...' })
   @IsOptional()

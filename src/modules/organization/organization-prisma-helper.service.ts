@@ -9,6 +9,8 @@ import {
 } from '@prisma/client';
 import { PaginationQueryDto } from 'src/common/dto/pagination.dto';
 import { PrismaService } from 'src/common/services/prismaService';
+import { CommonException } from 'src/common/exceptions/common.exception';
+import { StatusCodes } from 'src/common/enums/status-codes';
 import { getPaginationMetadata } from 'src/common/utils/pagination.util';
 
 @Injectable()
@@ -118,8 +120,20 @@ export class OrganizationPrismaHelperService {
   async findMetaFlagsForOrganization(
     where: Prisma.MetaFlagsForOrganizationWhereUniqueInput,
   ): Promise<MetaFlagsForOrganization> {
-    return await this.prismaService.metaFlagsForOrganization.findUniqueOrThrow({
-      where,
+    const existing = await this.prismaService.metaFlagsForOrganization.findUnique(
+      { where },
+    );
+    if (existing) return existing;
+
+    if (!where.organizationId) {
+      throw new CommonException(
+        'Organization meta flags not found',
+        StatusCodes.NOT_FOUND,
+      );
+    }
+
+    return this.prismaService.metaFlagsForOrganization.create({
+      data: { organizationId: where.organizationId },
     });
   }
 

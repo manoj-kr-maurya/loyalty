@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { PointsController } from './points.controller';
 import { PointsService } from './points.service';
 import { ConfigService } from '@nestjs/config';
-import { ApiKeyGuard } from 'src/common/guards/api-key.guard';
+import { OrganizationApiKeyGuard } from 'src/modules/auth/guards/organization-api-key.guard';
 
 describe('PointsController', () => {
   let controller: PointsController;
@@ -95,14 +95,11 @@ describe('PointsController', () => {
             get: jest.fn().mockReturnValue('test-api-key'),
           }),
         },
-        {
-          provide: ApiKeyGuard,
-          useFactory: () => ({
-            canActivate: jest.fn().mockReturnValue(true),
-          }),
-        },
       ],
-    }).compile();
+    })
+      .overrideGuard(OrganizationApiKeyGuard)
+      .useValue({ canActivate: jest.fn().mockReturnValue(true) })
+      .compile();
 
     controller = module.get<PointsController>(PointsController);
     pointsService = module.get(PointsService);

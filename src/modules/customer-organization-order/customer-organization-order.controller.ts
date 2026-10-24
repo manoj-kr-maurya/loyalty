@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -8,7 +9,12 @@ import {
   UseGuards,
   UsePipes,
 } from '@nestjs/common';
-import { ApiBody, ApiOperation, ApiResponse, ApiSecurity, ApiTags } from '@nestjs/swagger';
+import {
+  ApiOperation,
+  ApiResponse,
+  ApiSecurity,
+  ApiTags,
+} from '@nestjs/swagger';
 import { CallStatuses } from 'src/common/enums/status-codes';
 import { CustomerOrganizationOrderService } from './customer-organization-order.service';
 import {
@@ -16,12 +22,16 @@ import {
   UpdateOrderStatusSchema,
 } from './DTO/customerOrganizationOrder.dto';
 import { customerOrganizationOrderResponseCodes } from './enums/responseCodes';
-import { ApiKeyGuard } from 'src/common/guards/api-key.guard';
+import { OrganizationApiKeyGuard } from 'src/modules/auth/guards/organization-api-key.guard';
 import { JoiValidationPipe } from 'src/common/pipes/joi-validation.pipe';
+import { CurrentAuth } from 'src/modules/auth/decorators/current-auth.decorator';
+import { OrganizationAuthContext } from 'src/modules/auth/api-key.service';
+import { resolveOrganizationId } from 'src/modules/auth/resolve-organization-id';
+import { UserTypes } from 'src/common/enums/user-types';
 
 @ApiTags('Customer-Organization-Orders')
 @ApiSecurity('x-api-key')
-@UseGuards(ApiKeyGuard)
+@UseGuards(OrganizationApiKeyGuard)
 @Controller('customer-organization/order')
 export class CustomerOrganizationOrderController {
   constructor(
@@ -30,16 +40,28 @@ export class CustomerOrganizationOrderController {
 
   @Post()
   @ApiOperation({ summary: 'Create an order for a customer to organization' })
-  @ApiResponse({ status: 201, description: 'The order has been successfully created.' })
+  @ApiResponse({
+    status: 201,
+    description: 'The order has been successfully created.',
+  })
   @UsePipes(new JoiValidationPipe(CreateOrderSchema))
   async createOrder(
-    @Body() createOrderDto: { organizationId: string; burningAmountDetails: any; details?: any; idempotencyKey?: string },
+    @Body()
+    createOrderDto: {
+      customerId: string;
+      organizationId: string;
+      burningAmountDetails: any;
+      details?: any;
+      idempotencyKey?: string;
+    },
+    @CurrentAuth() auth: OrganizationAuthContext,
   ) {
-    const { organizationId, ...data } = createOrderDto;
+    const { customerId, organizationId, ...data } = createOrderDto;
+    const effectiveOrganizationId = resolveOrganizationId(auth, organizationId);
     const orgOrder =
       await this.customerOrganizationOrderService.createCustomerOrganizationOrder(
-        organizationId,
-        data as any,
+        customerId,
+        { ...data, organizationId: effectiveOrganizationId } as any,
       );
     return {
       status: CallStatuses.Success,
@@ -50,14 +72,24 @@ export class CustomerOrganizationOrderController {
 
   @Get('customer')
   @ApiOperation({ summary: 'get orders for a customer to organization' })
-  @ApiResponse({ status: 200, description: 'Orders have been successfully fetched' })
+  @ApiResponse({
+    status: 200,
+    description: 'Orders have been successfully fetched',
+  })
   async getAllCustomerOrganizationOrders(
+    @Query('customerId') customerId: string,
     @Query('organizationId') organizationId: string,
     @Query() query: any,
+    @CurrentAuth() auth: OrganizationAuthContext,
   ) {
+    if (!customerId) {
+      throw new BadRequestException('customerId is required');
+    }
+    const effectiveOrganizationId = resolveOrganizationId(auth, organizationId);
     const { cusOrders, metadata } =
       await this.customerOrganizationOrderService.fetchOrganizationCustomerOrdersPerCustomer(
-        organizationId,
+        customerId,
+        effectiveOrganizationId,
         query,
       );
     return {
@@ -71,9 +103,17 @@ export class CustomerOrganizationOrderController {
   @Get('potential-order-info/:id')
   @ApiOperation({ summary: 'get potential order info' })
   @ApiResponse({ status: 200, description: 'Order info successfully fetched' })
-  async fetchPotentialOrderInfo(@Param('id') id: string) {
+  async fetchPotentialOrderInfo(
+    @Param('id') id: string,
+    @Query('organizationId') organizationId: string,
+    @CurrentAuth() auth: OrganizationAuthContext,
+  ) {
+    const effectiveOrganizationId = resolveOrganizationId(auth, organizationId);
     const orgPotentialorder =
-      await this.customerOrganizationOrderService.fetchPotentialOrder(id);
+      await this.customerOrganizationOrderService.fetchPotentialOrder(
+        id,
+        effectiveOrganizationId,
+      );
     return {
       status: CallStatuses.Success,
       code: customerOrganizationOrderResponseCodes.Potenion_Order_Fetched,
@@ -83,14 +123,19 @@ export class CustomerOrganizationOrderController {
 
   @Get('organization')
   @ApiOperation({ summary: 'Get orders for an organization with filters' })
-  @ApiResponse({ status: 200, description: 'Orders have been successfully fetched' })
+  @ApiResponse({
+    status: 200,
+    description: 'Orders have been successfully fetched',
+  })
   async getAllOrders(
     @Query('organizationId') organizationId: string,
     @Query() query: any,
+    @CurrentAuth() auth: OrganizationAuthContext,
   ) {
+    const effectiveOrganizationId = resolveOrganizationId(auth, organizationId);
     const { orders, metadata } =
       await this.customerOrganizationOrderService.fetchOrganizationCustomerOrders(
-        organizationId,
+        effectiveOrganizationId,
         query,
       );
     const ordersWithCustomerName = orders.map((order: any) => {
@@ -109,15 +154,31 @@ export class CustomerOrganizationOrderController {
 
   @Post('update')
   @ApiOperation({ summary: 'update order for an organization' })
-  @ApiResponse({ status: 201, description: 'Orders have been successfully updated' })
+  @ApiResponse({
+    status: 201,
+    description: 'Orders have been successfully updated',
+  })
   @UsePipes(new JoiValidationPipe(UpdateOrderStatusSchema))
   async updateOrder(
-    @Body() updateOrderDto: { status: string; orderId: string; organizationId?: string },
+    @Body()
+    updateOrderDto: {
+      status: string;
+      orderId: string;
+      organizationId?: string;
+    },
+    @CurrentAuth() auth: OrganizationAuthContext,
   ) {
+    const organizationId = resolveOrganizationId(
+      auth,
+      updateOrderDto.organizationId,
+    );
     const orgOrder =
       await this.customerOrganizationOrderService.handleUpdateCustomerOrganizationOrder(
-        { status: updateOrderDto.status, orderId: updateOrderDto.orderId } as any,
-        { sub: updateOrderDto.organizationId } as any,
+        {
+          status: updateOrderDto.status,
+          orderId: updateOrderDto.orderId,
+        } as any,
+        { sub: organizationId, tokenType: UserTypes.organization } as any,
       );
     return {
       status: CallStatuses.Success,

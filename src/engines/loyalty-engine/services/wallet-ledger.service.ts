@@ -56,6 +56,7 @@ export class WalletLedgerService {
       params.organizationId,
       params.currencyCode,
     );
+    await this.reserveBucketFunds(tx, params.organizationId, params.currencyCode, points);
 
     const wallet = await tx.customerWallet.upsert({
       where: {
@@ -210,6 +211,142 @@ export class WalletLedgerService {
       idempotencyKey: params.idempotencyKey,
       metadata: params.metadata,
     });
+  }
+
+  /**
+   * Moves points from the organization's available bucket into the
+   * distributed bucket. Without this every earn was backed by thin air.
+   */
+  private async reserveBucketFunds(
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+    currencyCode: string,
+    points: number,
+  ): Promise<void> {
+    const bucket = await tx.currencyBucket.findUnique({
+      where: {
+        organization_id_currency_code: { organizationId, code: currencyCode },
+      },
+      select: { id: true, availableAmount: true },
+    });
+
+    if (!bucket) {
+      throw new CommonException(
+        `Currency bucket not found for ${currencyCode}`,
+        StatusCodes.NOT_FOUND,
+      );
+    }
+
+    if (bucket.availableAmount < points) {
+      throw new CommonException(
+        `Organization does not have enough ${currencyCode} to distribute`,
+        StatusCodes.CONFLICT,
+      );
+    }
+
+    await tx.currencyBucket.update({
+      where: { id: bucket.id },
+      data: {
+        availableAmount: { decrement: points },
+        distributedAmount: { increment: points },
+      },
+    });
+
+    await tx.currencyBucketTransaction.create({
+      data: {
+        currencyBucketId: bucket.id,
+        amount: points,
+        status: CustomerWalletPocketTransactionStatus.AWARDED,
+        transactionRef: randomUUID(),
+      },
+    });
+  }
+
+  /**
+   * Expires only pockets whose own expiry date is on or before `asOf`.
+   * The wallet aggregate, pocket rows, transaction trail, and ledger entry
+   * are updated in one transaction.
+   */
+  async expirePockets(
+    tx: Prisma.TransactionClient,
+    params: {
+      customerId: string;
+      organizationId: string;
+      currencyCode: string;
+      asOf: Date;
+    },
+  ): Promise<{ expiredPoints: number }> {
+    const wallet = await tx.customerWallet.findUnique({
+      where: {
+        customer_id_currency_code: {
+          customerId: params.customerId,
+          currencyCode: params.currencyCode,
+        },
+      },
+    });
+
+    if (!wallet) return { expiredPoints: 0 };
+
+    const pockets = await tx.customerWalletPocket.findMany({
+      where: {
+        customerWalletId: wallet.id,
+        availableBalance: { gt: 0 },
+        expiryDate: { not: null, lte: params.asOf },
+      },
+    });
+
+    let totalExpired = 0;
+
+    for (const pocket of pockets) {
+      const amount = pocket.availableBalance;
+      if (amount <= 0) continue;
+
+      const updated = await tx.customerWalletPocket.updateMany({
+        where: { id: pocket.id, availableBalance: amount },
+        data: { availableBalance: 0 },
+      });
+
+      if (updated.count === 0) {
+        throw new CommonException(
+          'Wallet was modified concurrently. Please retry.',
+          StatusCodes.CONFLICT,
+        );
+      }
+
+      await tx.customerWalletPocketTransaction.create({
+        data: {
+          customerWalletPocketId: pocket.id,
+          amount,
+          status: CustomerWalletPocketTransactionStatus.EXPIRED,
+          transactionRef: randomUUID(),
+        },
+      });
+
+      totalExpired += amount;
+    }
+
+    if (totalExpired === 0) return { expiredPoints: 0 };
+
+    const updatedWallet = await tx.customerWallet.update({
+      where: { id: wallet.id },
+      data: {
+        availableBalance: { decrement: totalExpired },
+        expiredBalance: { increment: totalExpired },
+      },
+    });
+
+    await this.appendLedger(tx, {
+      customerId: params.customerId,
+      organizationId: params.organizationId,
+      currencyCode: params.currencyCode,
+      type: LoyaltyLedgerType.EXPIRE,
+      points: -totalExpired,
+      balanceAfter: updatedWallet.availableBalance,
+      referenceType: 'EXPIRY',
+      referenceId: params.asOf.toISOString(),
+    });
+
+    return { expiredPoints: totalExpired };
   }
 
   private async assertCurrencyOwnership(

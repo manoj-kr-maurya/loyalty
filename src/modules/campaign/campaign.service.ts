@@ -21,6 +21,8 @@ import { envEnums } from 'src/config/enums';
 import { CampaignPrismaHelperService } from './campaign-prisma-helper.service';
 import { CommonUtilsService } from 'src/common/utils/common-utils.service';
 import { PrismaService } from 'src/common/services/prismaService';
+import { CommonException } from 'src/common/exceptions/common.exception';
+import { StatusCodes } from 'src/common/enums/status-codes';
 
 @Injectable()
 export class CampaignService {
@@ -76,6 +78,52 @@ export class CampaignService {
 
     // No overlap with any campaign, return false
     return { isOverlapping: false };
+  }
+
+  private validateCampaignWindow(form: CreateOrEditOrganizationCampaignForm) {
+    const startDate = new Date(form.startDate as unknown as string | Date);
+    const endDate = new Date(form.endDate as unknown as string | Date);
+
+    if (
+      Number.isNaN(startDate.getTime()) ||
+      Number.isNaN(endDate.getTime())
+    ) {
+      throw new CommonException(
+        'Campaign startDate and endDate must be valid dates',
+        StatusCodes.BAD_REQUEST,
+      );
+    }
+
+    if (startDate > endDate) {
+      throw new CommonException(
+        'Campaign startDate must be before or equal to endDate',
+        StatusCodes.BAD_REQUEST,
+      );
+    }
+
+    if (
+      !Number.isFinite(form.earningPercentage) ||
+      form.earningPercentage <= 0 ||
+      form.earningPercentage > 100
+    ) {
+      throw new CommonException(
+        'earningPercentage must be greater than 0 and at most 100',
+        StatusCodes.BAD_REQUEST,
+      );
+    }
+
+    if (
+      !Number.isFinite(form.earningExpiresIn) ||
+      form.earningExpiresIn < 0 ||
+      !Number.isInteger(form.earningExpiresIn)
+    ) {
+      throw new CommonException(
+        'earningExpiresIn must be a non-negative integer',
+        StatusCodes.BAD_REQUEST,
+      );
+    }
+
+    return { startDate, endDate };
   }
 
   /**
@@ -149,12 +197,13 @@ export class CampaignService {
     );
 
     const { force: isForceUpdate, ...campaignDetails } = form;
+    const { startDate, endDate } = this.validateCampaignWindow(form);
     const orgCampaigns = await this.getOrganizationLevelNonDeletedCampaigns(
       organizationId,
     );
 
     const { isOverlapping, overlappingCampaignName } =
-      this.checkCampaignDateOverlap(form.startDate, form.endDate, orgCampaigns);
+      this.checkCampaignDateOverlap(startDate, endDate, orgCampaigns);
 
     // If there's an overlap and force update is not enabled, throw exception
     if (isOverlapping && !isForceUpdate) {
@@ -177,6 +226,8 @@ export class CampaignService {
 
     const newCampaign = await this.campaignPrismaHelperService.createCampaign({
       ...campaignDetails,
+      startDate,
+      endDate,
       organization: { connect: { id: organizationId } },
     });
     const metaFlags = await this.prisma.metaFlagsForOrganization.findUnique({
@@ -299,14 +350,15 @@ export class CampaignService {
       );
     }
     // Get all organization campaigns for overlap check
+    const { startDate, endDate } = this.validateCampaignWindow(form);
     const orgCampaigns = await this.getOrganizationLevelNonDeletedCampaigns(
       organizationId,
     );
 
     const { isOverlapping, overlappingCampaignName } =
       this.checkCampaignDateOverlap(
-        form.startDate,
-        form.endDate,
+        startDate,
+        endDate,
         orgCampaigns,
         form.id, // Exclude the current campaign from overlap check
       );
@@ -321,8 +373,8 @@ export class CampaignService {
 
     return await this.campaignPrismaHelperService.updateCampaign(
       {
-        startDate: form.startDate,
-        endDate: form.endDate,
+        startDate,
+        endDate,
         earningPercentage: form.earningPercentage,
         currencyCode: form.currencyCode,
         earningExpiresIn: form.earningExpiresIn,

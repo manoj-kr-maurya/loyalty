@@ -19,40 +19,71 @@ import {
 import { CustomerService } from './customer.service';
 import { CustomerResponseCodes } from './enums/responseCodes';
 import { ApiSecurity, ApiTags } from '@nestjs/swagger';
-import { ApiKeyGuard } from 'src/common/guards/api-key.guard';
+import { OrganizationApiKeyGuard } from 'src/modules/auth/guards/organization-api-key.guard';
 import { JoiValidationPipe } from 'src/common/pipes/joi-validation.pipe';
+import { CurrentAuth } from 'src/modules/auth/decorators/current-auth.decorator';
+import { OrganizationAuthContext } from 'src/modules/auth/api-key.service';
+import { resolveOrganizationId } from 'src/modules/auth/resolve-organization-id';
+import { CommonException } from 'src/common/exceptions/common.exception';
+import { StatusCodes } from 'src/common/enums/status-codes';
+
+function withoutToken<T>(entity: T): T {
+  if (!entity || typeof entity !== 'object') return entity;
+  const { token: _token, ...safe } = entity as Record<string, unknown>;
+  return safe as T;
+}
 
 @ApiTags('Customer')
 @ApiSecurity('x-api-key')
-@UseGuards(ApiKeyGuard)
 @Controller('customer')
 export class CustomerController {
   constructor(private readonly customerService: CustomerService) {}
 
   @Get(`/`)
+  @UseGuards(OrganizationApiKeyGuard)
   async getCustomer(
     @Query('customerId') customerId: string,
-    @Param() balances: boolean,
+    @Query('organizationId') organizationId: string,
+    @Query('balances') balances: string,
+    @CurrentAuth() auth: OrganizationAuthContext,
   ) {
-    const data =
-      await this.customerService.someFunctionThatMyGetCustomerEndPointWillCall(
-        customerId,
-        balances,
-      );
+    if (!customerId) {
+      throw new CommonException('customerId is required', StatusCodes.BAD_REQUEST);
+    }
+
+    const effectiveOrganizationId = resolveOrganizationId(auth, organizationId);
+    const data = await this.customerService.getCustomerForOrganization(
+      customerId,
+      effectiveOrganizationId,
+      balances === 'true',
+    );
+
     return {
       status: CallStatuses.Success,
       code: CustomerResponseCodes.Customer_Found,
-      data,
+      data:
+        data && 'customer' in data
+          ? { ...data, customer: withoutToken(data.customer) }
+          : withoutToken(data),
     };
   }
 
   @Get(`/:customerId`)
-  async getCustomerWithId(@Param('customerId') customerId: string) {
-    const customer = await this.customerService.getCustomerById(customerId);
+  @UseGuards(OrganizationApiKeyGuard)
+  async getCustomerWithId(
+    @Param('customerId') customerId: string,
+    @Query('organizationId') organizationId: string,
+    @CurrentAuth() auth: OrganizationAuthContext,
+  ) {
+    const effectiveOrganizationId = resolveOrganizationId(auth, organizationId);
+    const customer = await this.customerService.getCustomerByIdForOrganization(
+      customerId,
+      effectiveOrganizationId,
+    );
     return {
       status: CallStatuses.Success,
       code: CustomerResponseCodes.Customer_Found,
-      data: customer,
+      data: withoutToken(customer),
     };
   }
 
@@ -95,33 +126,55 @@ export class CustomerController {
   }
 
   @Post(`/logout`)
+  @UseGuards(OrganizationApiKeyGuard)
   @UsePipes(new JoiValidationPipe(LogoutCustomerSchema))
-  async logoutCustomer(@Body('customerId') customerId: string) {
-    return await this.customerService.logoutCustomer(customerId);
+  async logoutCustomer(
+    @Body('customerId') customerId: string,
+    @Query('organizationId') organizationId: string,
+    @CurrentAuth() auth: OrganizationAuthContext,
+  ) {
+    const effectiveOrganizationId = resolveOrganizationId(auth, organizationId);
+    return await this.customerService.logoutCustomerForOrganization(
+      customerId,
+      effectiveOrganizationId,
+    );
   }
 
   @Post('/update')
+  @UseGuards(OrganizationApiKeyGuard)
   @UsePipes(new JoiValidationPipe(UpdateCustomerSchema))
   async updateCustomer(
     @Body() form: { customerId: string; name?: string; base64Logo?: string },
+    @Query('organizationId') organizationId: string,
+    @CurrentAuth() auth: OrganizationAuthContext,
   ) {
     const { customerId, ...data } = form;
+    const effectiveOrganizationId = resolveOrganizationId(auth, organizationId);
     const customer =
-      await this.customerService.someFunctionThatMyUpdateCustomerEndPointWillCall(
+      await this.customerService.updateCustomerForOrganization(
         customerId,
+        effectiveOrganizationId,
         data,
       );
     return {
       status: CallStatuses.Success,
       code: CustomerResponseCodes.Customer_Updated,
-      data: customer,
+      data: withoutToken(customer),
     };
   }
 
   @Get('/leader-board/top-customers')
-  async getTopCustomersForLeaderBoard() {
+  @UseGuards(OrganizationApiKeyGuard)
+  async getTopCustomersForLeaderBoard(
+    @Query('organizationId') organizationId: string,
+    @CurrentAuth() auth: OrganizationAuthContext,
+  ) {
+    const effectiveOrganizationId = resolveOrganizationId(auth, organizationId);
     const leaderBoardEntries =
-      await this.customerService.getTopCustomersForLeaderBoard();
+      await this.customerService.getTopCustomersForLeaderBoard(
+        48,
+        effectiveOrganizationId,
+      );
     return {
       status: CallStatuses.Success,
       code: CustomerResponseCodes.Leader_Board_Customers_Fetched,

@@ -43,6 +43,7 @@ model Organization {
   campaigns          OrganizationCampaign[]
   customerOrgOrders  CustomerOrganizationOrder[]
   rewardPrograms     RewardProgram[]
+  apiKeys            OrganizationApiKey[]
 
   @@index([phoneNumber])
   @@index([countryCode])
@@ -89,6 +90,25 @@ model MetaFlagsForCustomer {
   customerId           String   @unique
 
   @@map("metaFlagsForCustomer")
+}
+
+model OrganizationApiKey {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String?
+  prefix         String       @unique
+  keyHash        String       @unique
+  scopes         String[]     @default([])
+  isActive       Boolean      @default(true)
+  lastUsedAt     DateTime?
+  expiresAt      DateTime?
+  revokedAt      DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([organizationId, isActive])
+  @@map("organizationApiKey")
 }
 
 model OrganizationCampaign {

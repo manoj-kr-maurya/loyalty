@@ -1,4 +1,6 @@
 import { MailerService } from '@nestjs-modules/mailer';
+import { CommonException } from 'src/common/exceptions/common.exception';
+import { StatusCodes } from 'src/common/enums/status-codes';
 import { Injectable, Logger } from '@nestjs/common';
 import { GetInTouch } from './DTO/mail-and-sms.dto';
 import { ConfigService } from '@nestjs/config';
@@ -17,7 +19,19 @@ export class MailAndSmsService {
     private readonly factor2Service: Factor2Service,
   ) {}
 
-  getInTouchProducer(body: GetInTouch) {
+  private escapeHtml(value: string): string {
+    return value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  async getInTouchProducer(body: GetInTouch) {
+    const name = this.escapeHtml(body.metaData.name);
+    const email = this.escapeHtml(body.metaData.email);
+    const message = this.escapeHtml(body.metaData.message);
     const subject = 'Somebody is interested...';
     const html = `
       <!DOCTYPE html>
@@ -30,20 +44,24 @@ export class MailAndSmsService {
 
       <body>
         <h1>Somebody wants to contact you</h1>
-        <p>Their name is <strong>${body.metaData.name}</strong>.</p>
-        <p>Their message is <strong>${body.metaData.message}</strong>.</p>
+        <p>Their name is <strong>${name}</strong>.</p>
+        <p>Their message is <strong>${message}</strong>.</p>
 
-        <p>Their email is <strong>${body.metaData.email}</strong>.</p>
+        <p>Their email is <strong>${email}</strong>.</p>
 
       </body>
 
       </html>
       `;
     try {
-      this.getInTouch({ html, subject });
-    } catch {
-      console.error(
-        `Could not send get in touch email for this html: ${html} and this subject: ${subject}`,
+      await this.getInTouch({ html, subject });
+    } catch (error) {
+      this.logger.error(
+        `Could not send get-in-touch email: ${(error as Error).message}`,
+      );
+      throw new CommonException(
+        'Could not send contact message right now',
+        StatusCodes.SERVICE_UNAVAILABLE,
       );
     }
   }

@@ -8,6 +8,8 @@ import { AppController } from './app.controller';
 import { envEnums } from 'src/config/enums';
 import { envSchema } from 'src/config/env-schema';
 import { IncomingReqResLoggingInterceptor } from './interceptors/log/incoming-req-res-logger.interceptor';
+import { TenantScopeInterceptor } from './interceptors/tenant/tenant-scope.interceptor';
+import { DeprecationInterceptor } from './interceptors/deprecation/deprecation.interceptor';
 import { CurrencyModule } from './modules/currency/currency.module';
 import { CustomerModule } from './modules/customer/customer.module';
 import { CustomerOrganizationOrderModule } from './modules/customer-organization-order/customer-organization-order.module';
@@ -89,6 +91,14 @@ import { ValueExchangeEngineModule } from './engines/value-exchange-engine';
     {
       provide: APP_INTERCEPTOR,
       useClass: IncomingReqResLoggingInterceptor,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: TenantScopeInterceptor,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: DeprecationInterceptor,
     },
   ],
 })

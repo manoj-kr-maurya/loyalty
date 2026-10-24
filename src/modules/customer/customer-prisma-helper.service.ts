@@ -3,6 +3,8 @@ import { OtpPhoneFindOrCreateCustomerForm } from './DTO/customer.dto';
 import { Customer, MetaFlagsForCustomer, Prisma } from '@prisma/client';
 import to from 'await-to-js';
 import { PrismaService } from 'src/common/services/prismaService';
+import { CommonException } from 'src/common/exceptions/common.exception';
+import { StatusCodes } from 'src/common/enums/status-codes';
 
 @Injectable()
 export class CustomerPrismaHelperService {
@@ -30,6 +32,50 @@ export class CustomerPrismaHelperService {
       data: createCustomerPayload,
     });
     return createdCustomer;
+  }
+
+  /**
+   * A customer belongs to an organization when they have an order with that
+   * organization or hold at least one wallet in a currency owned by it.
+   * Throws a 404 (not 403) so callers cannot use the endpoint to enumerate
+   * customer ids across tenants.
+   */
+  async assertCustomerBelongsToOrganization(
+    customerId: string | undefined,
+    organizationId: string,
+  ): Promise<void> {
+    if (!customerId) {
+      throw new CommonException('customerId is required', StatusCodes.BAD_REQUEST);
+    }
+
+    const [order, currencies] = await Promise.all([
+      this.prismaService.customerOrganizationOrder.findFirst({
+        where: { customerId, organizationId },
+        select: { id: true },
+      }),
+      this.prismaService.currency.findMany({
+        where: { organizationId },
+        select: { code: true },
+      }),
+    ]);
+
+    if (order) return;
+
+    if (currencies.length > 0) {
+      const wallet = await this.prismaService.customerWallet.findFirst({
+        where: {
+          customerId,
+          currencyCode: { in: currencies.map((currency) => currency.code) },
+        },
+        select: { id: true },
+      });
+      if (wallet) return;
+    }
+
+    throw new CommonException(
+      'Customer not found in organization',
+      StatusCodes.NOT_FOUND,
+    );
   }
 
   async findCustomer(where: Prisma.CustomerWhereUniqueInput) {
@@ -115,7 +161,10 @@ export class CustomerPrismaHelperService {
    * @param interval - Time interval in hours (default: 24)
    * @returns Array of customers with their total earned amount
    */
-  async getTopCustomersForLeaderBoard(interval = 24) {
+  async getTopCustomersForLeaderBoard(
+    interval = 24,
+    organizationId?: string,
+  ) {
     return this.prismaService.$queryRaw<
       Array<{
         customer_name: string;
@@ -137,8 +186,9 @@ export class CustomerPrismaHelperService {
       "customer" c 
       ON coo."customerId" = c.id
     WHERE
-      coo."createdAt" >= NOW() - INTERVAL '240 HOURS'
+      coo."createdAt" >= NOW() - (${interval} * INTERVAL '1 hour')
       AND coo.status = 'COMPLETED'
+      AND (${organizationId ?? null}::text IS NULL OR coo."organizationId" = ${organizationId ?? null})
     GROUP BY
       coo."customerId", c."name", c."phoneNumber"
     ORDER BY
@@ -146,4 +196,5 @@ export class CustomerPrismaHelperService {
     LIMIT 10;
   `;
   }
+
 }

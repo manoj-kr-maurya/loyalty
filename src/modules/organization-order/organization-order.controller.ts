@@ -15,13 +15,16 @@ import { OrganizationOrderService } from './organization-order.service';
 import { CreateOrganizationOrderSchema, UpdateOrganizationOrderSchema } from './DTO/organizationOrder.dto';
 import { organizationOrderResponseCodes } from './enums/responseCodes';
 import { CallStatuses } from 'src/common/enums/status-codes';
-import { ApiKeyGuard } from 'src/common/guards/api-key.guard';
+import { OrganizationApiKeyGuard } from 'src/modules/auth/guards/organization-api-key.guard';
 import { PaginationQueryDto } from 'src/common/dto/pagination.dto';
 import { JoiValidationPipe } from 'src/common/pipes/joi-validation.pipe';
+import { CurrentAuth } from 'src/modules/auth/decorators/current-auth.decorator';
+import { OrganizationAuthContext } from 'src/modules/auth/api-key.service';
+import { resolveOrganizationId } from 'src/modules/auth/resolve-organization-id';
 
 @ApiTags('Organization-Orders')
 @ApiSecurity('x-api-key')
-@UseGuards(ApiKeyGuard)
+@UseGuards(OrganizationApiKeyGuard)
 @Controller('organization/order')
 export class OrganizationOrderController {
   constructor(
@@ -31,11 +34,15 @@ export class OrganizationOrderController {
   @Post()
   @ApiOperation({ summary: 'Create an order for an organization' })
   @ApiResponse({ status: 201, description: 'The order has been successfully created.' })
-  @UsePipes(new JoiValidationPipe(CreateOrganizationOrderSchema))
   async create(
-    @Body() createOrderDto: { organizationId: string; orderType: string; amount?: number; details: any },
+    @Body(new JoiValidationPipe(CreateOrganizationOrderSchema)) createOrderDto: { organizationId?: string; orderType: string; amount?: number; details: any },
+    @CurrentAuth() auth: OrganizationAuthContext,
   ) {
-    const { organizationId, ...data } = createOrderDto;
+    const { organizationId: requestedOrganizationId, ...data } = createOrderDto;
+    const organizationId = resolveOrganizationId(
+      auth,
+      requestedOrganizationId,
+    );
     const orgOrder =
       await this.organizationOrderService.createOrganizationOrder(
         organizationId,
@@ -54,10 +61,15 @@ export class OrganizationOrderController {
   async getOrders(
     @Query('organizationId') organizationId: string,
     @Query() query: PaginationQueryDto,
+    @CurrentAuth() auth: OrganizationAuthContext,
   ) {
+    const effectiveOrganizationId = resolveOrganizationId(
+      auth,
+      organizationId,
+    );
     const { orgOrders, metadata } =
       await this.organizationOrderService.fetchOrganizationOrders(
-        organizationId,
+        effectiveOrganizationId,
         query,
       );
     return {
@@ -71,25 +83,49 @@ export class OrganizationOrderController {
   @Get(':orderId')
   @ApiOperation({ summary: 'Get a specific order for an organization' })
   @ApiResponse({ status: 200, description: 'Order retrieved successfully.' })
-  getOrderById(
-    @Param('organizationId') organizationId: string,
+  async getOrderById(
     @Param('orderId') orderId: string,
+    @Query('organizationId') organizationId: string,
+    @CurrentAuth() auth: OrganizationAuthContext,
   ) {
-    // return this.organizationOrderService.findOne(organizationId, orderId);
+    const effectiveOrganizationId = resolveOrganizationId(
+      auth,
+      organizationId,
+    );
+    const order = await this.organizationOrderService.getOrganizationOrder(
+      orderId,
+      effectiveOrganizationId,
+    );
+    return {
+      status: CallStatuses.Success,
+      code: organizationOrderResponseCodes.Order_Fetched,
+      data: order,
+    };
   }
 
   @Put(':orderId')
   @ApiOperation({ summary: 'Update a specific order for an organization' })
   @ApiResponse({ status: 200, description: 'Order updated successfully.' })
-  @UsePipes(new JoiValidationPipe(UpdateOrganizationOrderSchema))
-  update(
+  async update(
     @Param('orderId') orderId: string,
-    @Body() updateOrderDto: { newStatus?: string },
+    @Body(new JoiValidationPipe(UpdateOrganizationOrderSchema)) updateOrderDto: { newStatus?: string },
+    @Query('organizationId') organizationId: string,
+    @CurrentAuth() auth: OrganizationAuthContext,
   ) {
-    // return this.organizationOrderService.update(
-    //   organizationId,
-    //   orderId,
-    //   updateOrderDto,
-    // );
+    const effectiveOrganizationId = resolveOrganizationId(
+      auth,
+      organizationId,
+    );
+    const order =
+      await this.organizationOrderService.updateOrganizationOrderForOrganization(
+        orderId,
+        effectiveOrganizationId,
+        updateOrderDto as any,
+      );
+    return {
+      status: CallStatuses.Success,
+      code: organizationOrderResponseCodes.Order_Updated,
+      data: order,
+    };
   }
 }

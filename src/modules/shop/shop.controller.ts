@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common';
 import { ApiBody, ApiOperation, ApiResponse, ApiSecurity, ApiTags, ApiQuery } from '@nestjs/swagger';
 import { CallStatuses } from 'src/common/enums/status-codes';
-import { ApiKeyGuard } from 'src/common/guards/api-key.guard';
+import { OrganizationApiKeyGuard } from 'src/modules/auth/guards/organization-api-key.guard';
 import { JoiValidationPipe } from 'src/common/pipes/joi-validation.pipe';
 import { UpdateShopForm, UpdateShopSchema } from './DTO/shop.dto';
 import { ShopResponseCodes } from './enums/responseCodes';
@@ -18,7 +18,7 @@ import { ShopService } from './shop.service';
 
 @ApiTags('Shops of an Organization')
 @ApiSecurity('x-api-key')
-@UseGuards(ApiKeyGuard)
+@UseGuards(OrganizationApiKeyGuard)
 @Controller('shop')
 export class ShopController {
   constructor(private readonly shopService: ShopService) {}

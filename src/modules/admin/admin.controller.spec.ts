@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
-import { ApiKeyGuard } from 'src/common/guards/api-key.guard';
+import { PlatformAdminGuard } from 'src/modules/auth/guards/platform-admin.guard';
 import { ConfigService } from '@nestjs/config';
 
 describe('AdminController', () => {
@@ -21,19 +21,19 @@ describe('AdminController', () => {
     inviteAdmin: jest.fn(),
   };
 
-  const mockApiKeyGuard = { canActivate: jest.fn().mockReturnValue(true) };
+  const mockPlatformAdminGuard = { canActivate: jest.fn().mockReturnValue(true) };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AdminController],
       providers: [
         { provide: AdminService, useValue: mockAdminService },
-        { provide: ApiKeyGuard, useValue: mockApiKeyGuard },
+        { provide: PlatformAdminGuard, useValue: mockPlatformAdminGuard },
         { provide: ConfigService, useValue: { get: jest.fn() } },
       ],
     })
-      .overrideGuard(ApiKeyGuard)
-      .useValue(mockApiKeyGuard)
+      .overrideGuard(PlatformAdminGuard)
+      .useValue(mockPlatformAdminGuard)
       .compile();
 
     controller = module.get<AdminController>(AdminController);
