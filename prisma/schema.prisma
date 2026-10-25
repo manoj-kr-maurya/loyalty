@@ -313,6 +313,9 @@ model RewardProgram {
   minBankAmount      Decimal?            @db.Decimal(12, 2)
   minimumCartValue   Decimal?            @db.Decimal(12, 2)
   maxDiscountValue   Decimal?            @db.Decimal(12, 2)
+  discountType       String?
+  isStackable        Boolean             @default(false)
+  applicableProducts Json?
   businessType       Json?
   maxClaimsPerUser   Int?
   maxClaimsTotal     Int?
@@ -365,9 +368,11 @@ model CouponCode {
   isUserSpecific Boolean          @default(true)
   status         CouponCodeStatus @default(AVAILABLE)
   usedCount      Int              @default(0)
-  maxUses        Int              @default(1)
+  maxUses        Int?             @default(1)
+  perUserLimit   Int?
   allocatedAt    DateTime         @default(now())
   expiresAt      DateTime?
+  rewardLedgers  RewardLedger[]
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
 
@@ -398,14 +403,18 @@ model RewardLedger {
   customerId     String
   program        RewardProgram      @relation(fields: [programId], references: [id])
   programId      String
+  couponCode     CouponCode?        @relation(fields: [couponCodeId], references: [id], onDelete: SetNull)
+  couponCodeId   String?
   rewardType     RewardType
   amount         Decimal
   details        Json?
   transactionRef String?
+  idempotencyKey String?            @unique
   status         RewardLedgerStatus @default(CREDITED)
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
 
+  @@index([couponCodeId])
   @@map("rewardLedger")
 }
 

@@ -646,7 +646,10 @@ export class PromoService {
       if (codeRecord.expiresAt && new Date(codeRecord.expiresAt) < new Date()) {
         codeReasons.push('This coupon code has expired');
       }
-      if (codeRecord.usedCount >= codeRecord.maxUses) {
+      if (
+        codeRecord.maxUses !== null &&
+        codeRecord.usedCount >= codeRecord.maxUses
+      ) {
         codeReasons.push('This coupon code has reached its usage limit');
       }
       if (codeRecord.isUserSpecific && codeRecord.customerId) {
