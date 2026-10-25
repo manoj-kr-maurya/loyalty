@@ -7,6 +7,7 @@ import { envEnums, Environments } from 'src/config/enums';
 import { ServerSettingsEnvVariables } from 'src/config/types';
 import { PrismaClientExceptionFilter } from 'src/common/exceptions/prisma/prisma-client-exception.filter';
 import * as bodyParser from 'body-parser';
+import helmet from 'helmet';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
@@ -14,6 +15,7 @@ async function bootstrap() {
     snapshot: true,
   });
   app.enableShutdownHooks();
+  app.use(helmet({ contentSecurityPolicy: false }));
   app.use(bodyParser.json({ limit: '10mb' }));
   app.use(bodyParser.urlencoded({ limit: '10mb', extended: true }));
 
@@ -29,23 +31,38 @@ async function bootstrap() {
       credentials: true,
     });
   } else {
+    app.getHttpAdapter().getInstance().set('trust proxy', 1);
+
+    const allowedOrigins = (process.env.CORS_ORIGIN ?? '')
+      .split(',')
+      .map((origin) => origin.trim())
+      .filter(Boolean);
+
     app.enableCors({
-      origin: process.env.CORS_ORIGIN || '*',
+      origin: allowedOrigins,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
       credentials: true,
     });
   }
 
-  const swaggerConfig = new DocumentBuilder()
-    .setTitle('Loyalty Engine')
-    .setDescription('Loyalty engine')
-    .setVersion('1.0')
-    .addTag('loyalty-engine')
-    .addBearerAuth()
-    .addApiKey({ type: 'apiKey', name: 'x-api-key', in: 'header' }, 'x-api-key')
-    .build();
-  const document = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('api', app, document);
+  if (
+    environment !== Environments.prod ||
+    process.env.SWAGGER_ENABLED === 'true'
+  ) {
+    const swaggerConfig = new DocumentBuilder()
+      .setTitle('Loyalty Engine')
+      .setDescription('Loyalty engine')
+      .setVersion('1.0')
+      .addTag('loyalty-engine')
+      .addBearerAuth()
+      .addApiKey(
+        { type: 'apiKey', name: 'x-api-key', in: 'header' },
+        'x-api-key',
+      )
+      .build();
+    const document = SwaggerModule.createDocument(app, swaggerConfig);
+    SwaggerModule.setup('api', app, document);
+  }
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: false,

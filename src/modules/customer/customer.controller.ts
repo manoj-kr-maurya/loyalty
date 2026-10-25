@@ -5,6 +5,7 @@ import {
   Param,
   Post,
   Query,
+  Req,
   UseGuards,
   UsePipes,
 } from '@nestjs/common';
@@ -15,11 +16,14 @@ import {
   OtpValidateOtpSchema,
   UpdateCustomerSchema,
   LogoutCustomerSchema,
+  UpdateMyProfileSchema,
+  MyStatementQuerySchema,
 } from './DTO/customer.dto';
 import { CustomerService } from './customer.service';
 import { CustomerResponseCodes } from './enums/responseCodes';
 import { ApiSecurity, ApiTags } from '@nestjs/swagger';
 import { OrganizationApiKeyGuard } from 'src/modules/auth/guards/organization-api-key.guard';
+import { CustomerJwtGuard } from 'src/modules/auth/guards/customer-jwt.guard';
 import { JoiValidationPipe } from 'src/common/pipes/joi-validation.pipe';
 import { CurrentAuth } from 'src/modules/auth/decorators/current-auth.decorator';
 import { OrganizationAuthContext } from 'src/modules/auth/api-key.service';
@@ -48,7 +52,10 @@ export class CustomerController {
     @CurrentAuth() auth: OrganizationAuthContext,
   ) {
     if (!customerId) {
-      throw new CommonException('customerId is required', StatusCodes.BAD_REQUEST);
+      throw new CommonException(
+        'customerId is required',
+        StatusCodes.BAD_REQUEST,
+      );
     }
 
     const effectiveOrganizationId = resolveOrganizationId(auth, organizationId);
@@ -65,6 +72,79 @@ export class CustomerController {
         data && 'customer' in data
           ? { ...data, customer: withoutToken(data.customer) }
           : withoutToken(data),
+    };
+  }
+
+  @Get('/me')
+  @UseGuards(CustomerJwtGuard)
+  async getMyProfile(@Req() req: { customerId: string }) {
+    const customer = await this.customerService.getMyProfile(req.customerId);
+    return {
+      status: CallStatuses.Success,
+      code: CustomerResponseCodes.Customer_Found,
+      data: withoutToken(customer),
+    };
+  }
+
+  @Post('/me')
+  @UseGuards(CustomerJwtGuard)
+  @UsePipes(new JoiValidationPipe(UpdateMyProfileSchema))
+  async updateMyProfile(
+    @Body() body: { name?: string },
+    @Req() req: { customerId: string },
+  ) {
+    const customer = await this.customerService.updateMyProfile(
+      req.customerId,
+      body,
+    );
+    return {
+      status: CallStatuses.Success,
+      code: CustomerResponseCodes.Customer_Updated,
+      data: withoutToken(customer),
+    };
+  }
+
+  @Get('/me/wallets')
+  @UseGuards(CustomerJwtGuard)
+  async getMyWallets(@Req() req: { customerId: string }) {
+    return {
+      status: CallStatuses.Success,
+      data: await this.customerService.getMyWallets(req.customerId),
+    };
+  }
+
+  @Get('/me/orders')
+  @UseGuards(CustomerJwtGuard)
+  async getMyOrders(
+    @Req() req: { customerId: string },
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return {
+      status: CallStatuses.Success,
+      data: await this.customerService.getMyOrders(
+        req.customerId,
+        Number(page) || 1,
+        Number(limit) || 20,
+      ),
+    };
+  }
+
+  @Get('/me/statement')
+  @UseGuards(CustomerJwtGuard)
+  @UsePipes(new JoiValidationPipe(MyStatementQuerySchema))
+  async getMyStatement(
+    @Req() req: { customerId: string },
+    @Query('organizationId') organizationId: string,
+    @Query('currencyCode') currencyCode: string,
+  ) {
+    return {
+      status: CallStatuses.Success,
+      data: await this.customerService.getMyStatement(
+        req.customerId,
+        organizationId,
+        currencyCode,
+      ),
     };
   }
 
@@ -150,12 +230,11 @@ export class CustomerController {
   ) {
     const { customerId, ...data } = form;
     const effectiveOrganizationId = resolveOrganizationId(auth, organizationId);
-    const customer =
-      await this.customerService.updateCustomerForOrganization(
-        customerId,
-        effectiveOrganizationId,
-        data,
-      );
+    const customer = await this.customerService.updateCustomerForOrganization(
+      customerId,
+      effectiveOrganizationId,
+      data,
+    );
     return {
       status: CallStatuses.Success,
       code: CustomerResponseCodes.Customer_Updated,

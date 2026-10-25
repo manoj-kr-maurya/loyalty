@@ -11,7 +11,6 @@ import {
 import {
   ApiTags,
   ApiOperation,
-  ApiParam,
   ApiQuery,
   ApiSecurity,
 } from '@nestjs/swagger';
@@ -22,12 +21,12 @@ import {
   PromoService,
   EvaluatePromotionsInput,
   CouponCheckInput,
-} from './promo.service';
+} from '../application/promo.service';
 import {
   CouponCodeService,
   GenerateCodeInput,
   ValidateCodeInput,
-} from './coupon-code.service';
+} from '../coupon-code.service';
 import {
   PromotionDto,
   PromotionSchema,
@@ -35,9 +34,9 @@ import {
   GetActivePromotionsSchema,
   CouponCheckDto,
   CouponCheckSchema,
-} from './DTO/promotion.dto';
-import { CouponAllocation, CouponClaim } from './coupon-manager.service';
-import { ClaimInput } from './claim-manager.service';
+} from '../DTO/promotion.dto';
+import { CouponAllocation, CouponClaim } from '../coupon-manager.service';
+import { ClaimInput } from '../claim-manager.service';
 import { DeprecatedApi } from 'src/interceptors/deprecation/deprecated-api.decorator';
 
 @ApiTags('Promo')

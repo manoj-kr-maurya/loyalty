@@ -1,11 +1,14 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
 import { PromoController } from './promo.controller';
-import { PromoService, EvaluatePromotionsOutput } from './promo.service';
-import { CouponCodeService } from './coupon-code.service';
-import { CouponBlock } from './coupon-manager.service';
-import { ClaimRecord } from './claim-manager.service';
-import { PromotionRecord } from './promotion-repository.service';
+import {
+  PromoService,
+  EvaluatePromotionsOutput,
+} from '../application/promo.service';
+import { CouponCodeService } from '../coupon-code.service';
+import { CouponBlock } from '../coupon-manager.service';
+import { ClaimRecord } from '../claim-manager.service';
+import { PromotionRecord } from '../promotion-repository.service';
 import { ConfigService } from '@nestjs/config';
 import { OrganizationApiKeyGuard } from 'src/modules/auth/guards/organization-api-key.guard';
 

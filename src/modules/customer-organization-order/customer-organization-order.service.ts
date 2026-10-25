@@ -87,12 +87,18 @@ export class CustomerOrganizationOrderService {
     }
 
     try {
-      return await this.performCreateCustomerOrganizationOrder(customerId, form);
+      return await this.performCreateCustomerOrganizationOrder(
+        customerId,
+        form,
+      );
     } catch (error) {
       // Race between the pre-check and the insert: the unique index on
       // (customerId, idempotencyKey) will reject the duplicate — return the
       // original instead of failing.
-      if (form.idempotencyKey && (error as { code?: string })?.code === 'P2002') {
+      if (
+        form.idempotencyKey &&
+        (error as { code?: string })?.code === 'P2002'
+      ) {
         const existing =
           await this.prismaService.customerOrganizationOrder.findFirst({
             where: { customerId, idempotencyKey: form.idempotencyKey },
@@ -198,6 +204,7 @@ export class CustomerOrganizationOrderService {
       if (isThereACoin) {
         await this.initializeAndBlockPoints(
           customerId,
+          form.organizationId,
           form.burningAmountDetails.coin,
           newOrder.id,
           tx as any,
@@ -209,6 +216,7 @@ export class CustomerOrganizationOrderService {
             const initializedCustomerPointForEarning =
               await this.customerWalletService.initialize(
                 customerId,
+                form.organizationId,
                 item.currencyCode,
                 tx as any,
               );
@@ -252,7 +260,10 @@ export class CustomerOrganizationOrderService {
     if (burningDetails.coin && burningDetails.coin.length > 0) {
       for (const coin of burningDetails.coin) {
         if (coin.amount <= 0) {
-          throw new InvalidAmountException(calculatedTotal, burningDetails as any);
+          throw new InvalidAmountException(
+            calculatedTotal,
+            burningDetails as any,
+          );
         }
         // Currently each coin is valued at 1 INR
         calculatedTotal += coin.amount;
@@ -350,6 +361,7 @@ export class CustomerOrganizationOrderService {
 
   private async initializeAndBlockPoints(
     customerId: string,
+    organizationId: string,
     burningCoins: BurningCoinAmountDetailsDto[],
     orderId: string,
     prismaClient?: PrismaService,
@@ -360,6 +372,7 @@ export class CustomerOrganizationOrderService {
           const initializedCustomerWallet =
             await this.customerWalletService.initialize(
               customerId,
+              organizationId,
               coin.currencyCode,
               prismaClient,
             );
@@ -672,7 +685,9 @@ export class CustomerOrganizationOrderService {
       );
     }
 
-    const callerOrg = await this.organizationService.getOrganization(caller.sub);
+    const callerOrg = await this.organizationService.getOrganization(
+      caller.sub,
+    );
     if (!callerOrg) {
       throw new ForbiddenException('Caller organization not found');
     }
@@ -718,6 +733,7 @@ export class CustomerOrganizationOrderService {
     await this.customerOrganizationOrderProducer.addHandleCustomerOrganizationOrderCompletingJob(
       {
         customerId: order.customerId,
+        organizationId: order.organizationId,
         transactionRef: order.id,
         earnings: pointsToCreditToCustomer,
         burningAmountDetails: order.customerBurningAmountDetail,
@@ -731,6 +747,7 @@ export class CustomerOrganizationOrderService {
         if (coin.amount > 0) {
           const initializedPoints = await this.customerWalletService.initialize(
             order.customerId,
+            order.organizationId,
             coin.currencyCode,
           );
           await initializedPoints.unblockPoints({
@@ -747,6 +764,7 @@ export class CustomerOrganizationOrderService {
         if (coin.amount > 0) {
           const initializedPoints = await this.customerWalletService.initialize(
             order.customerId,
+            order.organizationId,
             coin.currencyCode,
           );
           await initializedPoints.cancelPendingPoints({

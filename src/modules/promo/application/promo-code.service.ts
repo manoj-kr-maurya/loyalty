@@ -1,7 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { PrismaService } from 'src/common/services/prismaService';
 import { CommonException } from 'src/common/exceptions/common.exception';
 import { StatusCodes } from 'src/common/enums/status-codes';
+import { PromoCodeRepository } from '../infrastructure/promo-code.repository';
+import { calculatePromoDiscount } from '../domain/discount-calculator';
 
 // ─── Input / Output Types ───────────────────────────────
 
@@ -69,10 +70,10 @@ export interface StackingResult {
 }
 
 @Injectable()
-export class PromoEngineService {
-  private readonly logger = new Logger(PromoEngineService.name);
+export class PromoCodeService {
+  private readonly logger = new Logger(PromoCodeService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly promoCodeRepository: PromoCodeRepository) {}
 
   // ─── Promo Code CRUD ──────────────────────────────────
 
@@ -105,9 +106,7 @@ export class PromoEngineService {
     } = input;
 
     // Check for duplicate code
-    const existing = await this.prisma.promoCode.findUnique({
-      where: { code },
-    });
+    const existing = await this.promoCodeRepository.findUnique(code);
 
     if (existing) {
       throw new CommonException(
@@ -117,41 +116,73 @@ export class PromoEngineService {
     }
 
     // Validate dates
-    if (startDate >= endDate) {
+    if (
+      Number.isNaN(startDate.getTime()) ||
+      Number.isNaN(endDate.getTime()) ||
+      startDate >= endDate
+    ) {
       throw new CommonException(
         'startDate must be before endDate',
         StatusCodes.BAD_REQUEST,
       );
     }
 
-    // Validate discount
-    if (discountType === 'PERCENTAGE' && (discountValue <= 0 || discountValue > 100)) {
+    if (!Number.isFinite(discountValue) || discountValue <= 0) {
+      throw new CommonException(
+        'discountValue must be greater than zero',
+        StatusCodes.BAD_REQUEST,
+      );
+    }
+    if (discountType === 'PERCENTAGE' && discountValue > 100) {
       throw new CommonException(
         'Percentage discount must be between 0 and 100',
         StatusCodes.BAD_REQUEST,
       );
     }
-
-    const promoCode = await this.prisma.promoCode.create({
-      data: {
-        organizationId,
-        code,
-        name,
-        description,
+    if (
+      !['PERCENTAGE', 'ABSOLUTE', 'FREE_SHIPPING', 'BOGO'].includes(
         discountType,
-        discountValue,
-        minOrderAmount,
-        maxDiscount,
-        usageLimit,
-        perUserLimit,
-        startDate,
-        endDate,
-        isStackable,
-        applicableProducts: applicableProducts || [],
-      },
+      )
+    ) {
+      throw new CommonException(
+        'Unsupported discountType',
+        StatusCodes.BAD_REQUEST,
+      );
+    }
+    for (const [name, value] of Object.entries({
+      minOrderAmount,
+      maxDiscount,
+      usageLimit,
+      perUserLimit,
+    })) {
+      if (value !== undefined && (!Number.isFinite(value) || value < 0)) {
+        throw new CommonException(
+          `${name} must be a non-negative number`,
+          StatusCodes.BAD_REQUEST,
+        );
+      }
+    }
+
+    const promoCode = await this.promoCodeRepository.create({
+      organizationId,
+      code,
+      name,
+      description,
+      discountType,
+      discountValue,
+      minOrderAmount,
+      maxDiscount,
+      usageLimit,
+      perUserLimit,
+      startDate,
+      endDate,
+      isStackable,
+      applicableProducts: applicableProducts || [],
     });
 
-    this.logger.log(`Promo code created: ${code} (${discountType} ${discountValue})`);
+    this.logger.log(
+      `Promo code created: ${code} (${discountType} ${discountValue})`,
+    );
 
     return {
       id: promoCode.id,
@@ -166,12 +197,19 @@ export class PromoEngineService {
   /**
    * Validate a promo code without redeeming it.
    */
-  async validatePromoCode(input: ValidatePromoCodeInput): Promise<ValidatePromoCodeOutput> {
+  async validatePromoCode(
+    input: ValidatePromoCodeInput,
+  ): Promise<ValidatePromoCodeOutput> {
     const { code, organizationId, customerId, orderAmount, productIds } = input;
 
-    const promoCode = await this.prisma.promoCode.findUnique({
-      where: { code },
-    });
+    if (!Number.isFinite(orderAmount) || orderAmount <= 0) {
+      throw new CommonException(
+        'orderAmount must be greater than zero',
+        StatusCodes.BAD_REQUEST,
+      );
+    }
+
+    const promoCode = await this.promoCodeRepository.findUnique(code);
 
     if (!promoCode) {
       return {
@@ -239,9 +277,10 @@ export class PromoEngineService {
     }
 
     // Check per-user limit
-    const userRedemptions = await this.prisma.promoRedemption.count({
-      where: { promoCodeId: promoCode.id, customerId },
-    });
+    const userRedemptions = await this.promoCodeRepository.countRedemptions(
+      promoCode.id,
+      customerId,
+    );
 
     if (promoCode.perUserLimit && userRedemptions >= promoCode.perUserLimit) {
       return {
@@ -256,7 +295,10 @@ export class PromoEngineService {
     }
 
     // Check min order amount
-    if (promoCode.minOrderAmount && orderAmount < Number(promoCode.minOrderAmount)) {
+    if (
+      promoCode.minOrderAmount &&
+      orderAmount < Number(promoCode.minOrderAmount)
+    ) {
       return {
         code,
         valid: false,
@@ -272,7 +314,9 @@ export class PromoEngineService {
     if (promoCode.applicableProducts && productIds) {
       const applicableProducts = promoCode.applicableProducts as string[];
       if (applicableProducts.length > 0) {
-        const hasApplicable = productIds.some((pid) => applicableProducts.includes(pid));
+        const hasApplicable = productIds.some((pid) =>
+          applicableProducts.includes(pid),
+        );
         if (!hasApplicable) {
           return {
             code,
@@ -288,7 +332,7 @@ export class PromoEngineService {
     }
 
     // Calculate discount
-    const calculatedDiscount = this.computeDiscount(
+    const calculatedDiscount = calculatePromoDiscount(
       orderAmount,
       promoCode.discountType,
       Number(promoCode.discountValue),
@@ -308,58 +352,121 @@ export class PromoEngineService {
   /**
    * Redeem a promo code.
    */
-  async redeemPromoCode(input: RedeemPromoCodeInput): Promise<RedeemPromoCodeOutput> {
+  async redeemPromoCode(
+    input: RedeemPromoCodeInput,
+  ): Promise<RedeemPromoCodeOutput> {
     const { code, organizationId, customerId, orderAmount, orderRef } = input;
 
-    // Validate first
-    const validation = await this.validatePromoCode({
-      code,
-      organizationId,
-      customerId,
-      orderAmount,
-    });
-
-    if (!validation.valid) {
-      throw new CommonException(validation.reason || 'Invalid promo code', StatusCodes.BAD_REQUEST);
+    if (!Number.isFinite(orderAmount) || orderAmount <= 0) {
+      throw new CommonException(
+        'orderAmount must be greater than zero',
+        StatusCodes.BAD_REQUEST,
+      );
     }
 
-    const promoCode = await this.prisma.promoCode.findUnique({
-      where: { code },
-    });
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const result = await this.promoCodeRepository.runSerializable(
+          async (repository) => {
+            const promoCode = await repository.findUnique(code);
+            if (!promoCode) {
+              throw new CommonException(
+                'Promo code not found',
+                StatusCodes.NOT_FOUND,
+              );
+            }
 
-    if (!promoCode) {
-      throw new CommonException('Promo code not found', StatusCodes.NOT_FOUND);
+            const now = new Date();
+            if (
+              !promoCode.isActive ||
+              promoCode.organizationId !== organizationId ||
+              now < promoCode.startDate ||
+              now > promoCode.endDate
+            ) {
+              throw new CommonException(
+                'Promo code is not valid for this organization or time',
+                StatusCodes.BAD_REQUEST,
+              );
+            }
+            if (
+              promoCode.usageLimit &&
+              promoCode.usedCount >= promoCode.usageLimit
+            ) {
+              throw new CommonException(
+                'Promo code usage limit reached',
+                StatusCodes.BAD_REQUEST,
+              );
+            }
+            if (
+              promoCode.minOrderAmount &&
+              orderAmount < Number(promoCode.minOrderAmount)
+            ) {
+              throw new CommonException(
+                `Minimum order amount of ${promoCode.minOrderAmount} required`,
+                StatusCodes.BAD_REQUEST,
+              );
+            }
+
+            const userRedemptions = await repository.countRedemptions(
+              promoCode.id,
+              customerId,
+            );
+            if (
+              promoCode.perUserLimit &&
+              userRedemptions >= promoCode.perUserLimit
+            ) {
+              throw new CommonException(
+                'You have already used this promo code',
+                StatusCodes.BAD_REQUEST,
+              );
+            }
+
+            const discountAmount = calculatePromoDiscount(
+              orderAmount,
+              promoCode.discountType,
+              Number(promoCode.discountValue),
+              promoCode.maxDiscount ? Number(promoCode.maxDiscount) : undefined,
+            );
+
+            const redemption = await repository.createRedemption({
+              promoCodeId: promoCode.id,
+              customerId,
+              organizationId,
+              orderRef,
+              discountAmount,
+              orderAmount,
+            });
+
+            await repository.incrementUsedCount(promoCode.id);
+
+            return {
+              discountAmount,
+              finalAmount: orderAmount - discountAmount,
+              redemptionId: redemption.id,
+            };
+          },
+        );
+
+        this.logger.log(
+          `Promo redeemed: ${code} by ${customerId} discount=${result.discountAmount}`,
+        );
+
+        return { success: true, code, ...result };
+      } catch (error) {
+        if ((error as { code?: string })?.code === 'P2034') {
+          if (attempt < 3) {
+            continue;
+          }
+        } else {
+          throw error;
+        }
+      }
     }
 
-    // Record redemption
-    const redemption = await this.prisma.promoRedemption.create({
-      data: {
-        promoCodeId: promoCode.id,
-        customerId,
-        organizationId,
-        orderRef,
-        discountAmount: validation.calculatedDiscount,
-        orderAmount,
-      },
-    });
-
-    // Increment usage count
-    await this.prisma.promoCode.update({
-      where: { id: promoCode.id },
-      data: { usedCount: { increment: 1 } },
-    });
-
-    this.logger.log(
-      `Promo redeemed: ${code} by ${customerId} discount=${validation.calculatedDiscount}`,
+    throw new CommonException(
+      'Promo redemption could not be completed, please retry',
+      StatusCodes.CONFLICT,
     );
-
-    return {
-      success: true,
-      code,
-      discountAmount: validation.calculatedDiscount,
-      finalAmount: validation.finalAmount,
-      redemptionId: redemption.id,
-    };
   }
 
   /**
@@ -383,13 +490,60 @@ export class PromoEngineService {
       };
     }
 
-    const promoCodes = await this.prisma.promoCode.findMany({
-      where: {
-        code: { in: codes },
-        organizationId,
-        isActive: true,
-      },
-    });
+    if (!Number.isFinite(orderAmount) || orderAmount <= 0) {
+      throw new CommonException(
+        'orderAmount must be greater than zero',
+        StatusCodes.BAD_REQUEST,
+      );
+    }
+
+    const uniqueCodes = [...new Set(codes)];
+    if (uniqueCodes.length !== codes.length) {
+      return {
+        applicable: false,
+        codes,
+        totalDiscount: 0,
+        finalAmount: orderAmount,
+        breakdown: [],
+      };
+    }
+
+    const promoCodes = await this.promoCodeRepository.findCodesForStacking(
+      uniqueCodes,
+      organizationId,
+      customerId,
+    );
+
+    const now = new Date();
+    const allValid =
+      promoCodes.length === uniqueCodes.length &&
+      promoCodes.every(
+        (promoCode) =>
+          promoCode.isActive &&
+          now >= promoCode.startDate &&
+          now <= promoCode.endDate &&
+          !(
+            promoCode.usageLimit && promoCode.usedCount >= promoCode.usageLimit
+          ) &&
+          !(
+            promoCode.perUserLimit &&
+            promoCode.redemptions.length >= promoCode.perUserLimit
+          ) &&
+          !(
+            promoCode.minOrderAmount &&
+            orderAmount < Number(promoCode.minOrderAmount)
+          ),
+      );
+
+    if (!allValid) {
+      return {
+        applicable: false,
+        codes,
+        totalDiscount: 0,
+        finalAmount: orderAmount,
+        breakdown: [],
+      };
+    }
 
     // Check if all codes are stackable
     const nonStackable = promoCodes.filter((pc) => !pc.isStackable);
@@ -405,10 +559,14 @@ export class PromoEngineService {
 
     // Calculate discounts sequentially
     let remainingAmount = orderAmount;
-    const breakdown: Array<{ code: string; discountType: string; discountAmount: number }> = [];
+    const breakdown: Array<{
+      code: string;
+      discountType: string;
+      discountAmount: number;
+    }> = [];
 
     for (const promoCode of promoCodes) {
-      const discount = this.computeDiscount(
+      const discount = calculatePromoDiscount(
         remainingAmount,
         promoCode.discountType,
         Number(promoCode.discountValue),
@@ -436,7 +594,10 @@ export class PromoEngineService {
   /**
    * Get redemption history for a customer.
    */
-  async getRedemptionHistory(customerId: string, organizationId: string): Promise<{
+  async getRedemptionHistory(
+    customerId: string,
+    organizationId: string,
+  ): Promise<{
     customerId: string;
     organizationId: string;
     totalSaved: number;
@@ -447,11 +608,10 @@ export class PromoEngineService {
       redeemedAt: Date;
     }>;
   }> {
-    const redemptions = await this.prisma.promoRedemption.findMany({
-      where: { customerId, organizationId },
-      include: { promoCode: { select: { code: true } } },
-      orderBy: { redeemedAt: 'desc' },
-    });
+    const redemptions = await this.promoCodeRepository.findRedemptions(
+      customerId,
+      organizationId,
+    );
 
     const totalSaved = redemptions.reduce(
       (sum, r) => sum + Number(r.discountAmount),
@@ -469,45 +629,5 @@ export class PromoEngineService {
         redeemedAt: r.redeemedAt,
       })),
     };
-  }
-
-  // ─── Private Helpers ──────────────────────────────────
-
-  private computeDiscount(
-    orderAmount: number,
-    discountType: string,
-    discountValue: number,
-    maxDiscount?: number,
-  ): number {
-    let discount = 0;
-
-    switch (discountType) {
-      case 'PERCENTAGE':
-        discount = orderAmount * (discountValue / 100);
-        break;
-      case 'ABSOLUTE':
-        discount = discountValue;
-        break;
-      case 'FREE_SHIPPING':
-        discount = 0; // Free shipping is handled separately
-        break;
-      case 'BOGO':
-        discount = orderAmount * 0.5; // Buy one get one = 50% off
-        break;
-      default:
-        discount = 0;
-    }
-
-    // Cap at max discount if specified
-    if (maxDiscount && discount > maxDiscount) {
-      discount = maxDiscount;
-    }
-
-    // Cannot exceed order amount
-    if (discount > orderAmount) {
-      discount = orderAmount;
-    }
-
-    return Math.round(discount * 100) / 100;
   }
 }

@@ -7,6 +7,8 @@ import {
   Prisma,
 } from '@prisma/client';
 import { PrismaService } from 'src/common/services/prismaService';
+import { CommonException } from 'src/common/exceptions/common.exception';
+import { StatusCodes } from 'src/common/enums/status-codes';
 
 @Injectable()
 export class CampaignPrismaHelperService {
@@ -87,9 +89,15 @@ export class CampaignPrismaHelperService {
   async getCampaign(
     where: Prisma.OrganizationCampaignWhereUniqueInput,
   ): Promise<OrganizationCampaign> {
-    return await this.prismaService.organizationCampaign.findUniqueOrThrow({
-      where,
+    const campaign = await this.prismaService.organizationCampaign.findFirst({
+      where: where as Prisma.OrganizationCampaignWhereInput,
     });
+
+    if (!campaign) {
+      throw new CommonException('Campaign not found', StatusCodes.NOT_FOUND);
+    }
+
+    return campaign;
   }
 
   async updateMetaFlagsForOrganization(

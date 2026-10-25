@@ -73,6 +73,13 @@ export class ApiKeyService {
       );
     }
 
+    if (input.expiresAt && input.expiresAt <= new Date()) {
+      throw new CommonException(
+        'expiresAt must be in the future',
+        StatusCodes.BAD_REQUEST,
+      );
+    }
+
     const scopes = input.scopes?.length ? input.scopes : [...API_KEY_SCOPES];
 
     this.assertValidScopes(scopes);

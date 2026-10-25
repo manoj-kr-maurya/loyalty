@@ -14,6 +14,7 @@ import {
   WebhookDeliveryQueryDto,
   WebhookEndpointQueryDto,
 } from '../dto/webhook.dto';
+import { WebhookDispatcherService } from './webhook-dispatcher.service';
 
 const ENDPOINT_SELECT = {
   id: true,
@@ -32,7 +33,10 @@ const MIN_SECRET_LENGTH = 16;
 export class WebhookService {
   private readonly logger = new Logger(WebhookService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly dispatcher: WebhookDispatcherService,
+  ) {}
 
   async createEndpoint(input: CreateWebhookDto) {
     assertSafeWebhookUrl(input.url);
@@ -76,6 +80,98 @@ export class WebhookService {
     return {
       status: CallStatuses.Success,
       data: endpoints,
+    };
+  }
+
+  async rotateSecret(id: string, organizationId: string) {
+    const secret = randomBytes(32).toString('hex');
+    const result = await this.prisma.loyaltyWebhookEndpoint.updateMany({
+      where: { id, organizationId },
+      data: { secret: encryptWebhookSecret(secret) },
+    });
+
+    if (result.count === 0) {
+      throw new CommonException(
+        `Webhook endpoint ${id} not found`,
+        StatusCodes.NOT_FOUND,
+      );
+    }
+
+    this.logger.log(`Webhook endpoint ${id} secret rotated`);
+
+    return {
+      status: CallStatuses.Success,
+      data: { id, secret },
+    };
+  }
+
+  async testEndpoint(id: string, organizationId: string) {
+    const endpoint = await this.prisma.loyaltyWebhookEndpoint.findFirst({
+      where: { id, organizationId },
+      select: { id: true, url: true, secret: true, isActive: true },
+    });
+
+    if (!endpoint) {
+      throw new CommonException(
+        `Webhook endpoint ${id} not found`,
+        StatusCodes.NOT_FOUND,
+      );
+    }
+
+    if (!endpoint.isActive) {
+      throw new CommonException(
+        'Webhook endpoint is disabled',
+        StatusCodes.BAD_REQUEST,
+      );
+    }
+
+    const response = await this.dispatcher.testEndpoint(endpoint);
+
+    return {
+      status: CallStatuses.Success,
+      data: response,
+    };
+  }
+
+  async retryDelivery(id: string, organizationId: string) {
+    const result = await this.prisma.loyaltyWebhookDelivery.updateMany({
+      where: {
+        id,
+        organizationId,
+        status: 'EXHAUSTED',
+      },
+      data: {
+        status: 'PENDING',
+        attempts: 0,
+        nextAttemptAt: new Date(),
+        lastError: null,
+      },
+    });
+
+    if (result.count === 0) {
+      throw new CommonException(
+        `Exhausted webhook delivery ${id} not found`,
+        StatusCodes.NOT_FOUND,
+      );
+    }
+
+    return {
+      status: CallStatuses.Success,
+      data: { id, queued: true },
+    };
+  }
+
+  async listDeadLetters(organizationId: string, limit = 50) {
+    const deliveries = await this.prisma.loyaltyWebhookDelivery.findMany({
+      where: { organizationId, status: 'EXHAUSTED' },
+      include: { endpoint: { select: { url: true } } },
+      orderBy: { updatedAt: 'desc' },
+      take: Math.min(Math.max(limit, 1), 100),
+    });
+
+    return {
+      status: CallStatuses.Success,
+      data: deliveries,
     };
   }
 

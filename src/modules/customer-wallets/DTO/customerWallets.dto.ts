@@ -255,12 +255,14 @@ export interface handleReversalTransactionJobData {
   transactionRef: string;
   currencyCode: string;
   customerId: string;
+  organizationId: string;
   reversalTime: Date;
   status: CustomerWalletPocketTransactionStatus;
 }
 
 export interface initializePointsJobData {
   customerId: string;
+  organizationId: string;
   currencyCode: string;
 }
 export interface handleInitializeCustomerPointsJobData {
@@ -269,6 +271,7 @@ export interface handleInitializeCustomerPointsJobData {
 
 export interface customerOrganizationOrderCompletingJobData {
   customerId: string;
+  organizationId: string;
   transactionRef: string;
   earnings: CustomerCreditPoints[];
   burningAmountDetails: CustomerBurningAmountDetailDto;

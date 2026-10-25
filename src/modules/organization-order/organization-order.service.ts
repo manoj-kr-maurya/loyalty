@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { CreateOrderDto, UpdateOrderDto } from './DTO/organizationOrder.dto';
 import {
   OrganizationOrder,
@@ -129,6 +133,17 @@ export class OrganizationOrderService {
         `Order is already ${order.orderStatus} and cannot be changed`,
       );
     }
+
+    if (
+      order.orderType === OrganizationOrderType.CURRENCY_PURCHASE &&
+      updateOrderDto.newStatus === OrganizationOrderStatus.COMPLETED &&
+      order.orderStatus !== OrganizationOrderStatus.COMPLETED
+    ) {
+      throw new BadRequestException(
+        'Currency purchase orders must be confirmed by the platform after payment',
+      );
+    }
+
     return this.updateOrganizationOrder(orderId, updateOrderDto);
   }
 

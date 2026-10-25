@@ -5,7 +5,11 @@ export class CreateCurrencyForm {
   @ApiProperty({ description: `Currency code`, example: 'KFC', type: String })
   currencyCode!: string;
 
-  @ApiProperty({ description: `Currency name`, example: 'KFC Reward', type: String })
+  @ApiProperty({
+    description: `Currency name`,
+    example: 'KFC Reward',
+    type: String,
+  })
   name!: string;
 }
 
@@ -61,7 +65,18 @@ export const CreateOrgCurrencyBucketSchema = Joi.object({
 export const AddBalanceSchema = Joi.object({
   organizationId: Joi.string().optional(),
   currencyCode: Joi.string().required(),
-  amount: Joi.number().min(1).required(),
+  amount: Joi.number().integer().min(1).required(),
+  paymentReference: Joi.string().min(4).required(),
+  paymentAmount: Joi.number().positive().required(),
+  paymentProvider: Joi.string().optional(),
+}).unknown(true);
+
+export const ConfirmCurrencyPurchaseSchema = Joi.object({
+  organizationId: Joi.string().optional(),
+  orderId: Joi.string().required(),
+  paymentReference: Joi.string().min(4).required(),
+  paymentAmount: Joi.number().positive().required(),
+  paymentProvider: Joi.string().optional(),
 }).unknown(true);
 
 export const UpdateBucketPropertiesSchema = Joi.object({

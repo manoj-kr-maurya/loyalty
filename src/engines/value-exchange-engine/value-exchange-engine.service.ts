@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from 'src/common/services/prismaService';
 import { CommonException } from 'src/common/exceptions/common.exception';
 import { StatusCodes } from 'src/common/enums/status-codes';
@@ -68,9 +69,6 @@ export class ValueExchangeEngineService {
   private readonly DEFAULT_SPREAD = 0.005; // 0.5%
   private readonly QUOTE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
-  // In-memory quote store (production would use Redis)
-  private quotes = new Map<string, { data: ExchangeQuoteOutput; expiresAt: number }>();
-
   constructor(private readonly prisma: PrismaService) {}
 
   // ─── Agreement Management ─────────────────────────────
@@ -103,6 +101,36 @@ export class ValueExchangeEngineService {
       effectiveFrom,
       effectiveUntil,
     } = input;
+
+    if (!Number.isFinite(conversionRatio) || conversionRatio <= 0) {
+      throw new CommonException(
+        'conversionRatio must be greater than zero',
+        StatusCodes.BAD_REQUEST,
+      );
+    }
+    for (const [name, value] of Object.entries({
+      minAmount,
+      maxAmount,
+      dailyCap,
+      monthlyCap,
+    })) {
+      if (value !== undefined && (!Number.isInteger(value) || value < 0)) {
+        throw new CommonException(
+          `${name} must be a non-negative integer`,
+          StatusCodes.BAD_REQUEST,
+        );
+      }
+    }
+    if (
+      minAmount !== undefined &&
+      maxAmount !== undefined &&
+      minAmount > maxAmount
+    ) {
+      throw new CommonException(
+        'minAmount cannot be greater than maxAmount',
+        StatusCodes.BAD_REQUEST,
+      );
+    }
 
     // Prevent self-exchange
     if (sourceEntityId === targetEntityId) {
@@ -166,14 +194,16 @@ export class ValueExchangeEngineService {
   /**
    * Get all exchange agreements for an organization.
    */
-  async getAgreements(sourceEntityId: string): Promise<Array<{
-    id: string;
-    name: string;
-    sourceCurrency: string;
-    targetCurrency: string;
-    conversionRatio: number;
-    isActive: boolean;
-  }>> {
+  async getAgreements(sourceEntityId: string): Promise<
+    Array<{
+      id: string;
+      name: string;
+      sourceCurrency: string;
+      targetCurrency: string;
+      conversionRatio: number;
+      isActive: boolean;
+    }>
+  > {
     const agreements = await this.prisma.exchangeAgreement.findMany({
       where: { sourceEntityId },
     });
@@ -194,30 +224,29 @@ export class ValueExchangeEngineService {
    * Get a real-time exchange quote (valid for 5 minutes).
    */
   async getQuote(input: ExchangeQuoteInput): Promise<ExchangeQuoteOutput> {
-    const { agreementId, sourceEntityId, sourceCustomerId, sourceAmount } = input;
+    const { agreementId, sourceEntityId, sourceCustomerId, sourceAmount } =
+      input;
 
-    const agreement = await this.prisma.exchangeAgreement.findUnique({
-      where: { id: agreementId },
+    if (!Number.isInteger(sourceAmount) || sourceAmount <= 0) {
+      throw new CommonException(
+        'sourceAmount must be a positive integer',
+        StatusCodes.BAD_REQUEST,
+      );
+    }
+
+    const agreement = await this.prisma.exchangeAgreement.findFirst({
+      where: { id: agreementId, sourceEntityId },
     });
 
     if (!agreement) {
-      throw new CommonException('Exchange agreement not found', StatusCodes.NOT_FOUND);
+      throw new CommonException(
+        'Exchange agreement not found',
+        StatusCodes.NOT_FOUND,
+      );
     }
 
-    if (!agreement.isActive) {
-      throw new CommonException('Exchange agreement is inactive', StatusCodes.BAD_REQUEST);
-    }
+    this.assertAgreementUsable(agreement);
 
-    // Check date range
-    const now = new Date();
-    if (agreement.effectiveFrom && now < agreement.effectiveFrom) {
-      throw new CommonException('Exchange agreement has not started', StatusCodes.BAD_REQUEST);
-    }
-    if (agreement.effectiveUntil && now > agreement.effectiveUntil) {
-      throw new CommonException('Exchange agreement has expired', StatusCodes.BAD_REQUEST);
-    }
-
-    // Check amount bounds
     if (agreement.minAmount && sourceAmount < agreement.minAmount) {
       throw new CommonException(
         `Minimum exchange amount is ${agreement.minAmount}`,
@@ -231,37 +260,46 @@ export class ValueExchangeEngineService {
       );
     }
 
+    await this.assertCapAvailable(this.prisma, agreement, sourceAmount);
+
     const spread = this.DEFAULT_SPREAD;
     const baseRate = Number(agreement.conversionRatio);
     const effectiveRate = baseRate * (1 - spread);
-    const targetAmount = sourceAmount * effectiveRate;
+    const targetAmount = Math.round(sourceAmount * effectiveRate);
+    const expiresAt = new Date(Date.now() + this.QUOTE_TTL_MS);
 
-    const quoteId = `QTE-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    const stored = await this.prisma.exchangeQuote.create({
+      data: {
+        agreementId: agreement.id,
+        sourceEntityId,
+        sourceCustomerId,
+        sourceAmount,
+        targetAmount,
+        sourceCurrency: agreement.sourceCurrency,
+        targetCurrency: agreement.targetCurrency,
+        conversionRatio: baseRate,
+        spread,
+        effectiveRate,
+        expiresAt,
+      },
+    });
 
-    const quote: ExchangeQuoteOutput = {
-      quoteId,
-      agreementId,
+    this.logger.log(
+      `Quote generated: ${stored.id} ${sourceAmount} ${agreement.sourceCurrency} → ${targetAmount} ${agreement.targetCurrency}`,
+    );
+
+    return {
+      quoteId: stored.id,
+      agreementId: agreement.id,
       sourceAmount,
       sourceCurrency: agreement.sourceCurrency,
-      targetAmount: Math.round(targetAmount * 100) / 100,
+      targetAmount,
       targetCurrency: agreement.targetCurrency,
       conversionRatio: baseRate,
       spread,
       effectiveRate: Math.round(effectiveRate * 10000) / 10000,
-      expiresAt: new Date(Date.now() + this.QUOTE_TTL_MS),
+      expiresAt,
     };
-
-    // Store quote in memory with TTL
-    this.quotes.set(quoteId, {
-      data: quote,
-      expiresAt: Date.now() + this.QUOTE_TTL_MS,
-    });
-
-    this.logger.log(
-      `Quote generated: ${quoteId} ${sourceAmount} ${agreement.sourceCurrency} → ${quote.targetAmount} ${agreement.targetCurrency}`,
-    );
-
-    return quote;
   }
 
   // ─── Execute ──────────────────────────────────────────
@@ -272,80 +310,108 @@ export class ValueExchangeEngineService {
   async execute(input: ExchangeExecuteInput): Promise<ExchangeOrderOutput> {
     const { quoteId, sourceEntityId, sourceCustomerId } = input;
 
-    // Validate quote
-    const stored = this.quotes.get(quoteId);
-    if (!stored) {
-      throw new CommonException('Quote not found or expired', StatusCodes.NOT_FOUND);
-    }
-    if (Date.now() > stored.expiresAt) {
-      this.quotes.delete(quoteId);
-      throw new CommonException('Quote has expired', StatusCodes.BAD_REQUEST);
-    }
+    return this.prisma.$transaction(
+      async (tx) => {
+        const quote = await tx.exchangeQuote.findFirst({
+          where: {
+            id: quoteId,
+            sourceEntityId,
+            sourceCustomerId,
+            consumedAt: null,
+            expiresAt: { gt: new Date() },
+          },
+        });
 
-    const quote = stored.data;
+        if (!quote) {
+          throw new CommonException(
+            'Quote not found, expired, or belongs to another customer',
+            StatusCodes.NOT_FOUND,
+          );
+        }
 
-    // Look up the agreement to get targetEntityId
-    const agreement = await this.prisma.exchangeAgreement.findUnique({
-      where: { id: quote.agreementId },
-    });
+        const agreement = await tx.exchangeAgreement.findFirst({
+          where: { id: quote.agreementId, sourceEntityId },
+        });
 
-    if (!agreement) {
-      throw new CommonException('Exchange agreement not found', StatusCodes.NOT_FOUND);
-    }
+        if (!agreement) {
+          throw new CommonException(
+            'Exchange agreement not found',
+            StatusCodes.NOT_FOUND,
+          );
+        }
 
-    const referenceId = `EXC-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+        this.assertAgreementUsable(agreement);
+        await this.assertCapAvailable(tx, agreement, quote.sourceAmount);
 
-    // Create exchange order
-    const order = await this.prisma.exchangeOrder.create({
-      data: {
-        agreementId: quote.agreementId,
-        sourceEntityId,
-        targetEntityId: agreement.targetEntityId,
-        sourceCustomerId,
-        sourceAmount: Math.round(quote.sourceAmount),
-        targetAmount: Math.round(quote.targetAmount),
-        conversionRate: quote.effectiveRate,
-        status: 'COMPLETED',
-        referenceId,
-      },
-    });
+        const claimed = await tx.exchangeQuote.updateMany({
+          where: {
+            id: quote.id,
+            consumedAt: null,
+            expiresAt: { gt: new Date() },
+          },
+          data: { consumedAt: new Date() },
+        });
 
-    // Create audit log
-    await this.prisma.exchangeAuditLog.create({
-      data: {
-        exchangeOrderId: order.id,
-        action: 'EXECUTED',
-        details: {
-          quoteId,
-          sourceEntityId,
-          sourceCustomerId,
-          sourceAmount: quote.sourceAmount,
+        if (claimed.count === 0) {
+          throw new CommonException(
+            'Quote has already been consumed or expired',
+            StatusCodes.CONFLICT,
+          );
+        }
+
+        const referenceId = `EXC-${Date.now()}-${Math.random()
+          .toString(36)
+          .slice(2, 9)}`;
+
+        const order = await tx.exchangeOrder.create({
+          data: {
+            agreementId: quote.agreementId,
+            sourceEntityId,
+            targetEntityId: agreement.targetEntityId,
+            sourceCustomerId,
+            sourceAmount: quote.sourceAmount,
+            targetAmount: quote.targetAmount,
+            conversionRate: quote.effectiveRate,
+            status: 'COMPLETED',
+            referenceId,
+          },
+        });
+
+        await tx.exchangeAuditLog.create({
+          data: {
+            exchangeOrderId: order.id,
+            action: 'EXECUTED',
+            details: {
+              quoteId,
+              sourceEntityId,
+              sourceCustomerId,
+              sourceAmount: quote.sourceAmount,
+              sourceCurrency: quote.sourceCurrency,
+              targetAmount: quote.targetAmount,
+              targetCurrency: quote.targetCurrency,
+              effectiveRate: Number(quote.effectiveRate),
+            },
+          },
+        });
+
+        this.logger.log(
+          `Exchange executed: order=${order.id} ${quote.sourceAmount} ${quote.sourceCurrency} → ${quote.targetAmount} ${quote.targetCurrency}`,
+        );
+
+        return {
+          orderId: order.id,
+          referenceId: order.referenceId,
+          status: order.status,
+          sourceAmount: order.sourceAmount,
           sourceCurrency: quote.sourceCurrency,
-          targetAmount: quote.targetAmount,
+          targetAmount: order.targetAmount,
           targetCurrency: quote.targetCurrency,
-          effectiveRate: quote.effectiveRate,
-        },
+          effectiveRate: Number(order.conversionRate),
+          executedAt: order.createdAt,
+        };
       },
-    });
-
-    // Consume the quote
-    this.quotes.delete(quoteId);
-
-    this.logger.log(
-      `Exchange executed: order=${order.id} ${quote.sourceAmount} ${quote.sourceCurrency} → ${quote.targetAmount} ${quote.targetCurrency}`,
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
-
-    return {
-      orderId: order.id,
-      referenceId: order.referenceId,
-      status: order.status,
-      sourceAmount: order.sourceAmount,
-      sourceCurrency: quote.sourceCurrency,
-      targetAmount: order.targetAmount,
-      targetCurrency: quote.targetCurrency,
-      effectiveRate: Number(order.conversionRate),
-      executedAt: order.createdAt,
-    };
   }
 
   // ─── Reverse ──────────────────────────────────────────
@@ -360,86 +426,105 @@ export class ValueExchangeEngineService {
   }): Promise<ExchangeOrderOutput> {
     const { orderId, sourceEntityId, reason } = input;
 
-    const order = await this.prisma.exchangeOrder.findUnique({
-      where: { id: orderId },
-    });
+    return this.prisma.$transaction(
+      async (tx) => {
+        const order = await tx.exchangeOrder.findFirst({
+          where: { id: orderId, sourceEntityId },
+        });
 
-    if (!order) {
-      throw new CommonException('Exchange order not found', StatusCodes.NOT_FOUND);
-    }
+        if (!order) {
+          throw new CommonException(
+            'Exchange order not found',
+            StatusCodes.NOT_FOUND,
+          );
+        }
 
-    if (order.status !== 'COMPLETED') {
-      throw new CommonException(
-        `Cannot reverse order with status: ${order.status}`,
-        StatusCodes.BAD_REQUEST,
-      );
-    }
+        if (order.status !== 'COMPLETED') {
+          throw new CommonException(
+            `Cannot reverse order with status: ${order.status}`,
+            StatusCodes.BAD_REQUEST,
+          );
+        }
 
-    // Fetch agreement to get currency codes
-    const agreement = await this.prisma.exchangeAgreement.findUnique({
-      where: { id: order.agreementId },
-    });
+        const agreement = await tx.exchangeAgreement.findUnique({
+          where: { id: order.agreementId },
+        });
 
-    if (!agreement) {
-      throw new CommonException('Exchange agreement not found', StatusCodes.NOT_FOUND);
-    }
+        if (!agreement) {
+          throw new CommonException(
+            'Exchange agreement not found',
+            StatusCodes.NOT_FOUND,
+          );
+        }
 
-    const reversalReferenceId = `REV-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+        const claimed = await tx.exchangeOrder.updateMany({
+          where: { id: orderId, status: 'COMPLETED' },
+          data: {
+            status: 'REVERSED',
+            reversalReason: reason,
+            reversedAt: new Date(),
+          },
+        });
 
-    // Create reversal order
-    const reversal = await this.prisma.exchangeOrder.create({
-      data: {
-        agreementId: order.agreementId,
-        sourceEntityId: order.targetEntityId,
-        targetEntityId: order.sourceEntityId,
-        sourceCustomerId: order.targetCustomerId || order.sourceCustomerId,
-        targetCustomerId: order.sourceCustomerId,
-        sourceAmount: order.targetAmount,
-        targetAmount: order.sourceAmount,
-        conversionRate: 1 / Number(order.conversionRate),
-        status: 'REVERSED',
-        referenceId: reversalReferenceId,
+        if (claimed.count === 0) {
+          throw new CommonException(
+            'Order was already reversed',
+            StatusCodes.CONFLICT,
+          );
+        }
+
+        const reversalReferenceId = `REV-${Date.now()}-${Math.random()
+          .toString(36)
+          .slice(2, 9)}`;
+        const conversionRate = 1 / Number(order.conversionRate);
+
+        const reversal = await tx.exchangeOrder.create({
+          data: {
+            agreementId: order.agreementId,
+            sourceEntityId: order.targetEntityId,
+            targetEntityId: order.sourceEntityId,
+            sourceCustomerId: order.targetCustomerId || order.sourceCustomerId,
+            targetCustomerId: order.sourceCustomerId,
+            sourceAmount: order.targetAmount,
+            targetAmount: order.sourceAmount,
+            conversionRate,
+            status: 'REVERSED',
+            referenceId: reversalReferenceId,
+          },
+        });
+
+        await tx.exchangeAuditLog.create({
+          data: {
+            exchangeOrderId: reversal.id,
+            action: 'REVERSED',
+            details: {
+              originalOrderId: orderId,
+              reason,
+              sourceAmount: order.targetAmount,
+              targetAmount: order.sourceAmount,
+              conversionRate,
+            },
+          },
+        });
+
+        this.logger.log(
+          `Exchange reversed: original=${orderId} reversal=${reversal.id}`,
+        );
+
+        return {
+          orderId: reversal.id,
+          referenceId: reversal.referenceId,
+          status: reversal.status,
+          sourceAmount: reversal.sourceAmount,
+          sourceCurrency: agreement.targetCurrency,
+          targetAmount: reversal.targetAmount,
+          targetCurrency: agreement.sourceCurrency,
+          effectiveRate: Number(reversal.conversionRate),
+          executedAt: reversal.createdAt,
+        };
       },
-    });
-
-    // Update original order
-    await this.prisma.exchangeOrder.update({
-      where: { id: orderId },
-      data: {
-        status: 'REVERSED',
-        reversalReason: reason,
-        reversedAt: new Date(),
-      },
-    });
-
-    // Audit log
-    await this.prisma.exchangeAuditLog.create({
-      data: {
-        exchangeOrderId: reversal.id,
-        action: 'REVERSED',
-        details: {
-          originalOrderId: orderId,
-          reason,
-          sourceAmount: order.targetAmount,
-          targetAmount: order.sourceAmount,
-          conversionRate: 1 / Number(order.conversionRate),
-        },
-      },
-    });
-
-    this.logger.log(`Exchange reversed: original=${orderId} reversal=${reversal.id}`);
-
-    return {
-      orderId: reversal.id,
-      referenceId: reversal.referenceId,
-      status: reversal.status,
-      sourceAmount: reversal.sourceAmount,
-      sourceCurrency: agreement.targetCurrency,
-      targetAmount: reversal.targetAmount,
-      targetCurrency: agreement.sourceCurrency,
-      effectiveRate: Number(reversal.conversionRate),
-      executedAt: reversal.createdAt,
-    };
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
   }
 
   // ─── History ──────────────────────────────────────────
@@ -447,7 +532,10 @@ export class ValueExchangeEngineService {
   /**
    * Get exchange order history for a customer.
    */
-  async getOrderHistory(sourceCustomerId: string, sourceEntityId: string): Promise<{
+  async getOrderHistory(
+    sourceCustomerId: string,
+    sourceEntityId: string,
+  ): Promise<{
     sourceCustomerId: string;
     sourceEntityId: string;
     totalOrders: number;
@@ -480,5 +568,94 @@ export class ValueExchangeEngineService {
         executedAt: o.createdAt,
       })),
     };
+  }
+
+  private assertAgreementUsable(agreement: {
+    isActive: boolean;
+    effectiveFrom: Date;
+    effectiveUntil: Date | null;
+  }) {
+    if (!agreement.isActive) {
+      throw new CommonException(
+        'Exchange agreement is inactive',
+        StatusCodes.BAD_REQUEST,
+      );
+    }
+
+    const now = new Date();
+    if (agreement.effectiveFrom && now < agreement.effectiveFrom) {
+      throw new CommonException(
+        'Exchange agreement has not started',
+        StatusCodes.BAD_REQUEST,
+      );
+    }
+    if (agreement.effectiveUntil && now > agreement.effectiveUntil) {
+      throw new CommonException(
+        'Exchange agreement has expired',
+        StatusCodes.BAD_REQUEST,
+      );
+    }
+  }
+
+  private async assertCapAvailable(
+    client: Prisma.TransactionClient | PrismaService,
+    agreement: {
+      id: string;
+      dailyCap: number | null;
+      monthlyCap: number | null;
+    },
+    sourceAmount: number,
+  ) {
+    const now = new Date();
+    const dayStart = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+    );
+    const monthStart = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
+    );
+
+    const [daily, monthly] = await Promise.all([
+      agreement.dailyCap
+        ? client.exchangeOrder.aggregate({
+            where: {
+              agreementId: agreement.id,
+              status: 'COMPLETED',
+              createdAt: { gte: dayStart },
+            },
+            _sum: { sourceAmount: true },
+          })
+        : Promise.resolve(null),
+      agreement.monthlyCap
+        ? client.exchangeOrder.aggregate({
+            where: {
+              agreementId: agreement.id,
+              status: 'COMPLETED',
+              createdAt: { gte: monthStart },
+            },
+            _sum: { sourceAmount: true },
+          })
+        : Promise.resolve(null),
+    ]);
+
+    if (
+      agreement.dailyCap &&
+      Number(daily?._sum.sourceAmount ?? 0) + sourceAmount > agreement.dailyCap
+    ) {
+      throw new CommonException(
+        'Daily exchange cap exceeded',
+        StatusCodes.BAD_REQUEST,
+      );
+    }
+
+    if (
+      agreement.monthlyCap &&
+      Number(monthly?._sum.sourceAmount ?? 0) + sourceAmount >
+        agreement.monthlyCap
+    ) {
+      throw new CommonException(
+        'Monthly exchange cap exceeded',
+        StatusCodes.BAD_REQUEST,
+      );
+    }
   }
 }

@@ -1,6 +1,7 @@
 import {
   CanActivate,
   ExecutionContext,
+  ForbiddenException,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -28,6 +29,9 @@ export class PlatformAdminGuard implements CanActivate {
     }
 
     if (!this.safeEqual(apiKey, platformKey)) {
+      if (request.organizationAuth?.type === 'organization') {
+        throw new ForbiddenException('Platform administrator key required');
+      }
       throw new UnauthorizedException('Invalid API key');
     }
 

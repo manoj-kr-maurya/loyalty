@@ -5,7 +5,11 @@ export class OtpPhoneFindOrCreateCustomerForm {
   @ApiProperty({ description: `Country code`, example: '91', type: String })
   countryCode!: string;
 
-  @ApiProperty({ description: `Phone number`, example: '9898989898', type: String })
+  @ApiProperty({
+    description: `Phone number`,
+    example: '9898989898',
+    type: String,
+  })
   phoneNumber!: string;
 
   @ApiPropertyOptional({ description: `Name`, example: 'Y', type: String })
@@ -50,6 +54,15 @@ export const UpdateCustomerSchema = Joi.object({
   customerId: Joi.string().required(),
   name: Joi.string().optional(),
   base64Logo: Joi.string().optional(),
+}).unknown(true);
+
+export const UpdateMyProfileSchema = Joi.object({
+  name: Joi.string().min(1).max(120).optional(),
+}).unknown(false);
+
+export const MyStatementQuerySchema = Joi.object({
+  organizationId: Joi.string().required(),
+  currencyCode: Joi.string().required(),
 }).unknown(true);
 
 export const LogoutCustomerSchema = Joi.object({

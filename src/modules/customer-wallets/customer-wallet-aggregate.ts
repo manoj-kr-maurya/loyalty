@@ -13,10 +13,7 @@ import {
   CustomerUnblockPoints,
 } from './DTO/customerWallets.dto';
 import { CustomerWalletJobProducer } from './jobs/producer';
-import {
-  InsufficientCurrencyBalanceException,
-  TransactionNotFoundException,
-} from './exceptions/customerWallets.exception';
+import { InsufficientCurrencyBalanceException } from './exceptions/customerWallets.exception';
 
 /**
  * Wallet aggregate — a stateless-per-operation wrapper around a single
@@ -63,6 +60,7 @@ export class CustomerWalletAggregate {
           customerWalletPocket: {
             customerWallet: {
               customerId: params.customerId,
+              organizationId: wallet.organizationId,
               currencyCode: params.currencyCode,
             },
           },
@@ -81,13 +79,23 @@ export class CustomerWalletAggregate {
       return this;
     }
 
-    const amountToCancel = pendingTransaction.amount;
+    const amountToCancel = this.normalizeAmount(
+      pendingTransaction.amount,
+      'Pending amount',
+    );
 
-    await this.prisma.$transaction(async (prisma) => {
-      await prisma.customerWalletPocketTransaction.update({
-        where: { id: pendingTransaction.id },
+    let cancelled = false;
+
+    await this.withTransaction(async (prisma) => {
+      const claimed = await prisma.customerWalletPocketTransaction.updateMany({
+        where: {
+          id: pendingTransaction.id,
+          status: CustomerWalletPocketTransactionStatus.PENDING,
+        },
         data: { status: CustomerWalletPocketTransactionStatus.CANCELLED },
       });
+
+      if (claimed.count === 0) return;
 
       await prisma.customerWalletPocketTransaction.create({
         data: {
@@ -103,97 +111,125 @@ export class CustomerWalletAggregate {
         data: { pendingBalance: { decrement: amountToCancel } },
       });
 
-      await prisma.customerWallet.update({
-        where: { id: wallet.id },
+      const updated = await prisma.customerWallet.updateMany({
+        where: { id: wallet.id, pendingBalance: { gte: amountToCancel } },
         data: { pendingBalance: { decrement: amountToCancel } },
       });
+      if (updated.count === 0) {
+        throw new Error('Wallet pending balance changed concurrently');
+      }
+
+      cancelled = true;
     });
 
-    wallet.pendingBalance -= amountToCancel;
+    if (cancelled) {
+      wallet.pendingBalance -= amountToCancel;
+    }
 
     return this;
   }
 
-  async blockPoints(form: CustomerBlockPoints): Promise<CustomerWalletAggregate> {
+  async blockPoints(
+    form: CustomerBlockPoints,
+  ): Promise<CustomerWalletAggregate> {
     const wallet = this.requireWallet();
+    const amountToBlockTotal = this.normalizeAmount(
+      form.amount,
+      'Block amount',
+    );
 
-    if (form.amount > wallet.availableBalance) {
-      throw new InsufficientCurrencyBalanceException(
-        wallet.availableBalance,
-        form.amount,
-        form.currencyCode,
-      );
-    }
-
-    return await this.prisma.$transaction(async (prisma) => {
-      const pockets = await prisma.customerWalletPocket.findMany({
-        where: {
-          customerWalletId: wallet.id,
-          availableBalance: { gt: 0 },
-        },
-        orderBy: [{ expiryDate: 'asc' }, { createdAt: 'asc' }],
-      });
-
-      let remainingAmount = form.amount;
-      const transactionsToCreate: Prisma.CustomerWalletPocketTransactionCreateManyInput[] =
-        [];
-
-      for (const pocket of pockets) {
-        const amountToBlock = Math.min(remainingAmount, pocket.availableBalance);
-
-        transactionsToCreate.push({
-          customerWalletPocketId: pocket.id,
-          amount: amountToBlock,
-          status: CustomerWalletPocketTransactionStatus.BLOCKED,
-          transactionRef: form.transactionRef,
-        });
-
-        await prisma.customerWalletPocket.update({
-          where: { id: pocket.id },
+    return await this.prisma
+      .$transaction(async (prisma) => {
+        const walletUpdate = await prisma.customerWallet.updateMany({
+          where: {
+            id: wallet.id,
+            availableBalance: { gte: amountToBlockTotal },
+          },
           data: {
-            availableBalance: { decrement: amountToBlock },
-            blockedBalance: { increment: amountToBlock },
+            availableBalance: { decrement: amountToBlockTotal },
+            blockedBalance: { increment: amountToBlockTotal },
           },
         });
 
-        remainingAmount -= amountToBlock;
-        if (remainingAmount <= 0) break;
-      }
+        if (walletUpdate.count === 0) {
+          throw new InsufficientCurrencyBalanceException(
+            wallet.availableBalance,
+            amountToBlockTotal,
+            form.currencyCode,
+          );
+        }
 
-      if (remainingAmount > 0) {
-        throw new Error('Unexpected error: Not enough balance in pockets');
-      }
-
-      await prisma.customerWalletPocketTransaction.createMany({
-        data: transactionsToCreate,
-      });
-
-      await prisma.customerWallet.update({
-        where: { id: wallet.id },
-        data: {
-          availableBalance: { decrement: form.amount },
-          blockedBalance: { increment: form.amount },
-        },
-      });
-    }).then(async () => {
-      wallet.availableBalance -= form.amount;
-      wallet.blockedBalance += form.amount;
-
-      if (form.unblockInMinutes) {
-        const reversalTime = new Date(
-          Date.now() + form.unblockInMinutes * 60 * 1000,
-        );
-        await this.producer.scheduleReversalJob({
-          transactionRef: form.transactionRef,
-          currencyCode: form.currencyCode,
-          customerId: form.customerId,
-          reversalTime,
-          status: CustomerWalletPocketTransactionStatus.BLOCKED,
+        const pockets = await prisma.customerWalletPocket.findMany({
+          where: {
+            customerWalletId: wallet.id,
+            availableBalance: { gt: 0 },
+          },
+          orderBy: [{ expiryDate: 'asc' }, { createdAt: 'asc' }],
         });
-      }
 
-      return this;
-    });
+        let remainingAmount = amountToBlockTotal;
+        const transactionsToCreate: Prisma.CustomerWalletPocketTransactionCreateManyInput[] =
+          [];
+
+        for (const pocket of pockets) {
+          const amountToBlock = Math.min(
+            remainingAmount,
+            pocket.availableBalance,
+          );
+
+          transactionsToCreate.push({
+            customerWalletPocketId: pocket.id,
+            amount: amountToBlock,
+            status: CustomerWalletPocketTransactionStatus.BLOCKED,
+            transactionRef: form.transactionRef,
+          });
+
+          const pocketUpdate = await prisma.customerWalletPocket.updateMany({
+            where: {
+              id: pocket.id,
+              availableBalance: { gte: amountToBlock },
+            },
+            data: {
+              availableBalance: { decrement: amountToBlock },
+              blockedBalance: { increment: amountToBlock },
+            },
+          });
+          if (pocketUpdate.count === 0) {
+            throw new Error('Wallet pocket changed concurrently');
+          }
+
+          remainingAmount -= amountToBlock;
+          if (remainingAmount <= 0) break;
+        }
+
+        if (remainingAmount > 0) {
+          throw new Error('Unexpected error: Not enough balance in pockets');
+        }
+
+        await prisma.customerWalletPocketTransaction.createMany({
+          data: transactionsToCreate,
+        });
+      })
+      .then(async () => {
+        wallet.availableBalance -= amountToBlockTotal;
+        wallet.blockedBalance += amountToBlockTotal;
+
+        if (form.unblockInMinutes) {
+          const reversalTime = new Date(
+            Date.now() + form.unblockInMinutes * 60 * 1000,
+          );
+          await this.producer.scheduleReversalJob({
+            transactionRef: form.transactionRef,
+            currencyCode: form.currencyCode,
+            customerId: form.customerId,
+            organizationId: wallet.organizationId,
+            reversalTime,
+            status: CustomerWalletPocketTransactionStatus.BLOCKED,
+          });
+        }
+
+        return this;
+      });
   }
 
   async unblockPoints(
@@ -218,16 +254,22 @@ export class CustomerWalletAggregate {
       return this;
     }
 
-    await this.prisma.$transaction(async (prisma) => {
+    const claimedTransactions: typeof blockedTransactions = [];
+
+    await this.withTransaction(async (prisma) => {
       for (const transaction of blockedTransactions) {
-        await prisma.customerWalletPocketTransaction.create({
-          data: {
-            customerWalletPocketId: transaction.customerWalletPocketId,
-            amount: transaction.amount,
-            status: CustomerWalletPocketTransactionStatus.UNBLOCKED,
-            transactionRef: form.transactionRef,
+        const claimed = await prisma.customerWalletPocketTransaction.updateMany(
+          {
+            where: {
+              id: transaction.id,
+              status: CustomerWalletPocketTransactionStatus.BLOCKED,
+            },
+            data: { status: CustomerWalletPocketTransactionStatus.UNBLOCKED },
           },
-        });
+        );
+        if (claimed.count === 0) continue;
+
+        claimedTransactions.push(transaction);
 
         await prisma.customerWalletPocket.update({
           where: { id: transaction.customerWalletPocketId },
@@ -237,9 +279,26 @@ export class CustomerWalletAggregate {
           },
         });
       }
+
+      if (claimedTransactions.length === 0) return;
+
+      const total = claimedTransactions.reduce(
+        (sum, transaction) => sum + transaction.amount,
+        0,
+      );
+      const updated = await prisma.customerWallet.updateMany({
+        where: { id: wallet.id, blockedBalance: { gte: total } },
+        data: {
+          availableBalance: { increment: total },
+          blockedBalance: { decrement: total },
+        },
+      });
+      if (updated.count === 0) {
+        throw new Error('Wallet blocked balance changed concurrently');
+      }
     });
 
-    for (const transaction of blockedTransactions) {
+    for (const transaction of claimedTransactions) {
       wallet.availableBalance += transaction.amount;
       wallet.blockedBalance -= transaction.amount;
     }
@@ -269,16 +328,22 @@ export class CustomerWalletAggregate {
       return this;
     }
 
-    await this.prisma.$transaction(async (prisma) => {
+    const claimedTransactions: typeof blockedTransactions = [];
+
+    await this.withTransaction(async (prisma) => {
       for (const transaction of blockedTransactions) {
-        await prisma.customerWalletPocketTransaction.create({
-          data: {
-            customerWalletPocketId: transaction.customerWalletPocketId,
-            amount: transaction.amount,
-            status: CustomerWalletPocketTransactionStatus.DEBITED,
-            transactionRef: `DEBIT-${form.transactionRef}`,
+        const claimed = await prisma.customerWalletPocketTransaction.updateMany(
+          {
+            where: {
+              id: transaction.id,
+              status: CustomerWalletPocketTransactionStatus.BLOCKED,
+            },
+            data: { status: CustomerWalletPocketTransactionStatus.DEBITED },
           },
-        });
+        );
+        if (claimed.count === 0) continue;
+
+        claimedTransactions.push(transaction);
 
         await prisma.customerWalletPocket.update({
           where: { id: transaction.customerWalletPocketId },
@@ -288,9 +353,26 @@ export class CustomerWalletAggregate {
           },
         });
       }
+
+      if (claimedTransactions.length === 0) return;
+
+      const total = claimedTransactions.reduce(
+        (sum, transaction) => sum + transaction.amount,
+        0,
+      );
+      const updated = await prisma.customerWallet.updateMany({
+        where: { id: wallet.id, blockedBalance: { gte: total } },
+        data: {
+          blockedBalance: { decrement: total },
+          usedBalance: { increment: total },
+        },
+      });
+      if (updated.count === 0) {
+        throw new Error('Wallet blocked balance changed concurrently');
+      }
     });
 
-    for (const transaction of blockedTransactions) {
+    for (const transaction of claimedTransactions) {
       wallet.blockedBalance -= transaction.amount;
       wallet.usedBalance += transaction.amount;
     }
@@ -302,19 +384,20 @@ export class CustomerWalletAggregate {
     form: CustomerAddPendingPoints,
   ): Promise<CustomerWalletAggregate> {
     const wallet = this.requireWallet();
+    const amount = this.normalizeAmount(form.amount, 'Pending amount');
 
-    await this.prisma.$transaction(async (prisma) => {
+    await this.withTransaction(async (prisma) => {
       const newPocket = await prisma.customerWalletPocket.create({
         data: {
           customerWalletId: wallet.id,
-          pendingBalance: form.amount,
+          pendingBalance: amount,
         },
       });
 
       await prisma.customerWalletPocketTransaction.create({
         data: {
           customerWalletPocketId: newPocket.id,
-          amount: form.amount,
+          amount,
           status: CustomerWalletPocketTransactionStatus.PENDING,
           transactionRef: form.transactionRef,
         },
@@ -322,11 +405,11 @@ export class CustomerWalletAggregate {
 
       await prisma.customerWallet.update({
         where: { id: wallet.id },
-        data: { pendingBalance: { increment: form.amount } },
+        data: { pendingBalance: { increment: amount } },
       });
     });
 
-    wallet.pendingBalance += form.amount;
+    wallet.pendingBalance += amount;
 
     return this;
   }
@@ -353,9 +436,28 @@ export class CustomerWalletAggregate {
       return this;
     }
 
-    const amountToCredit = pendingTransaction.amount;
+    const amountToCredit = this.normalizeAmount(
+      pendingTransaction.amount,
+      'Credit amount',
+    );
+    const expiryDate = form.expiryDate ? new Date(form.expiryDate) : null;
+    if (expiryDate && Number.isNaN(expiryDate.getTime())) {
+      throw new Error('expiryDate must be a valid date');
+    }
 
-    await this.prisma.$transaction(async (prisma) => {
+    let credited = false;
+
+    await this.withTransaction(async (prisma) => {
+      const claimed = await prisma.customerWalletPocketTransaction.updateMany({
+        where: {
+          id: pendingTransaction.id,
+          status: CustomerWalletPocketTransactionStatus.PENDING,
+        },
+        data: { status: CustomerWalletPocketTransactionStatus.AWARDED },
+      });
+
+      if (claimed.count === 0) return;
+
       await prisma.customerWalletPocketTransaction.create({
         data: {
           customerWalletPocketId: pendingTransaction.customerWalletPocketId,
@@ -365,38 +467,41 @@ export class CustomerWalletAggregate {
         },
       });
 
-      await prisma.customerWalletPocketTransaction.update({
-        where: { id: pendingTransaction.id },
-        data: { status: CustomerWalletPocketTransactionStatus.AWARDED },
-      });
-
       await prisma.customerWalletPocket.update({
         where: { id: pendingTransaction.customerWalletPocketId },
         data: {
           pendingBalance: { decrement: amountToCredit },
           availableBalance: { increment: amountToCredit },
-          expiryDate: new Date(form.expiryDate),
+          expiryDate,
         },
       });
 
-      await prisma.customerWallet.update({
-        where: { id: wallet.id },
+      const updated = await prisma.customerWallet.updateMany({
+        where: { id: wallet.id, pendingBalance: { gte: amountToCredit } },
         data: {
           pendingBalance: { decrement: amountToCredit },
           availableBalance: { increment: amountToCredit },
         },
       });
+      if (updated.count === 0) {
+        throw new Error('Wallet pending balance changed concurrently');
+      }
+
+      credited = true;
     });
+
+    if (!credited) return this;
 
     wallet.pendingBalance -= amountToCredit;
     wallet.availableBalance += amountToCredit;
 
-    if (form.expiryDate) {
+    if (expiryDate) {
       await this.producer.scheduleReversalJob({
         transactionRef: form.transactionRef,
         customerId: form.customerId,
+        organizationId: wallet.organizationId,
         currencyCode: form.currencyCode,
-        reversalTime: new Date(form.expiryDate),
+        reversalTime: expiryDate,
         status: CustomerWalletPocketTransactionStatus.CREDITED,
       });
     }
@@ -417,6 +522,7 @@ export class CustomerWalletAggregate {
           customerWalletPocket: {
             customerWallet: {
               customerId: params.customerId,
+              organizationId: wallet.organizationId,
               currencyCode: params.currencyCode,
             },
           },
@@ -438,52 +544,98 @@ export class CustomerWalletAggregate {
     }
 
     const { customerWalletPocket } = creditTransaction;
-    const amountToExpire = Math.max(
-      customerWalletPocket.availableBalance - customerWalletPocket.usedBalance,
-      0,
-    );
+    const amountToExpire = customerWalletPocket.availableBalance;
 
-    await this.prisma.$transaction(async (prisma) => {
-      await prisma.customerWalletPocketTransaction.update({
-        where: { id: creditTransaction.id },
+    if (amountToExpire <= 0) {
+      return this;
+    }
+
+    let expired = false;
+
+    await this.withTransaction(async (prisma) => {
+      const claimed = await prisma.customerWalletPocketTransaction.updateMany({
+        where: {
+          id: creditTransaction.id,
+          status: CustomerWalletPocketTransactionStatus.CREDITED,
+        },
         data: { status: CustomerWalletPocketTransactionStatus.EXPIRED },
       });
+      if (claimed.count === 0) return;
 
-      await prisma.customerWalletPocket.update({
-        where: { id: customerWalletPocket.id },
+      const pocketUpdate = await prisma.customerWalletPocket.updateMany({
+        where: {
+          id: customerWalletPocket.id,
+          availableBalance: { gte: amountToExpire },
+        },
         data: {
           availableBalance: { decrement: amountToExpire },
           expiredBalance: { increment: amountToExpire },
         },
       });
+      if (pocketUpdate.count === 0) {
+        throw new Error('Wallet pocket changed concurrently');
+      }
 
-      await prisma.customerWallet.update({
-        where: { id: wallet.id },
+      const updated = await prisma.customerWallet.updateMany({
+        where: { id: wallet.id, availableBalance: { gte: amountToExpire } },
         data: {
           availableBalance: { decrement: amountToExpire },
           expiredBalance: { increment: amountToExpire },
         },
       });
+      if (updated.count === 0) {
+        throw new Error('Wallet balance changed concurrently');
+      }
+
+      expired = true;
     });
 
-    wallet.availableBalance -= amountToExpire;
-    wallet.expiredBalance += amountToExpire;
+    if (expired) {
+      wallet.availableBalance -= amountToExpire;
+      wallet.expiredBalance += amountToExpire;
+    }
 
     return this;
   }
 
+  /**
+   * Runs work in a transaction when the injected client is the root
+   * PrismaService. When the aggregate was created inside an existing
+   * transaction (order creation passes the tx client), that client has no
+   * `$transaction` method, so the work joins the caller's transaction.
+   */
+  private async withTransaction<T>(
+    work: (prisma: Prisma.TransactionClient) => Promise<T>,
+  ): Promise<T> {
+    const client = this.prisma as unknown as {
+      $transaction?: (
+        fn: (tx: Prisma.TransactionClient) => Promise<T>,
+      ) => Promise<T>;
+    };
+
+    if (typeof client.$transaction !== 'function') {
+      return work(this.prisma as unknown as Prisma.TransactionClient);
+    }
+
+    return client.$transaction(work);
+  }
+
+  /**
+   * Balances are persisted atomically by each mutation. `save()` refreshes
+   * the aggregate from the database so callers can never write a stale
+   * snapshot over concurrent changes.
+   */
   async save(): Promise<void> {
     const wallet = this.requireWallet();
-
-    await this.prisma.customerWallet.update({
+    this.wallet = await this.prisma.customerWallet.findUniqueOrThrow({
       where: { id: wallet.id },
-      data: {
-        availableBalance: wallet.availableBalance,
-        blockedBalance: wallet.blockedBalance,
-        pendingBalance: wallet.pendingBalance,
-        usedBalance: wallet.usedBalance,
-        expiredBalance: wallet.expiredBalance,
-      },
     });
+  }
+
+  private normalizeAmount(value: number, label: string): number {
+    if (!Number.isInteger(value) || value <= 0) {
+      throw new Error(`${label} must be a positive integer`);
+    }
+    return value;
   }
 }

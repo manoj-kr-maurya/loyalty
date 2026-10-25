@@ -15,6 +15,7 @@ import {
   AddBalanceSchema,
   UpdateBucketPropertiesSchema,
   FilterOrgCurrenciesSchema,
+  ConfirmCurrencyPurchaseSchema,
 } from './DTO/currency.dto';
 import { CurrencyResponseCodes } from './enums/responseCodes';
 import { CallStatuses } from 'src/common/enums/status-codes';
@@ -36,7 +37,8 @@ export class CurrencyController {
   @Post(`/create`)
   @UsePipes(new JoiValidationPipe(CreateCurrencySchema))
   async createCurrency(
-    @Body() form: { organizationId: string; currencyCode: string; name: string },
+    @Body()
+    form: { organizationId: string; currencyCode: string; name: string },
     @CurrentAuth() auth: OrganizationAuthContext,
   ) {
     const organizationId = resolveOrganizationId(auth, form.organizationId);
@@ -73,10 +75,7 @@ export class CurrencyController {
     @Query('organizationId') organizationId: string,
     @CurrentAuth() auth: OrganizationAuthContext,
   ) {
-    const effectiveOrganizationId = resolveOrganizationId(
-      auth,
-      organizationId,
-    );
+    const effectiveOrganizationId = resolveOrganizationId(auth, organizationId);
     const currencyBuckets =
       await this.currencyService.getOrganizationCurrencyBuckets(
         effectiveOrganizationId,
@@ -92,24 +91,63 @@ export class CurrencyController {
   @UseGuards(PlatformAdminGuard)
   @UsePipes(new JoiValidationPipe(AddBalanceSchema))
   async addBalanceToOrganizationCurrencyBucket(
-    @Body() form: { organizationId: string; currencyCode: string; amount: number },
+    @Body()
+    form: {
+      organizationId: string;
+      currencyCode: string;
+      amount: number;
+      paymentReference: string;
+      paymentAmount: number;
+      paymentProvider?: string;
+    },
     @CurrentAuth() auth: OrganizationAuthContext,
   ) {
     const organizationId = resolveOrganizationId(auth, form.organizationId);
-    await this.currencyService.addBalanceToOrganizationCurrencyBucket(
-      organizationId,
-      form.currencyCode,
-      form.amount,
-    );
+    const data =
+      await this.currencyService.addBalanceToOrganizationCurrencyBucket(
+        organizationId,
+        form.currencyCode,
+        form.amount,
+        form.paymentReference,
+        form.paymentAmount,
+        form.paymentProvider,
+      );
     return {
       status: CallStatuses.Success,
       code: CurrencyResponseCodes.Balance_Successfully_Updated,
+      data,
+    };
+  }
+
+  @Post('/confirm-currency-purchase')
+  @UseGuards(PlatformAdminGuard)
+  @UsePipes(new JoiValidationPipe(ConfirmCurrencyPurchaseSchema))
+  async confirmCurrencyPurchase(
+    @Body()
+    form: {
+      orderId: string;
+      paymentReference: string;
+      paymentAmount: number;
+      paymentProvider?: string;
+    },
+  ) {
+    const data = await this.currencyService.confirmCurrencyPurchase(form);
+    return {
+      status: CallStatuses.Success,
+      code: CurrencyResponseCodes.Balance_Successfully_Updated,
+      data,
     };
   }
 
   @Post('/update-organization-currency-bucket')
   async enableAutoTopupForOrganizationCurrencyBucket(
-    @Body(new JoiValidationPipe(UpdateBucketPropertiesSchema)) form: { id: string; autoTopUpEnabled: boolean; autoTopUpThreshold?: number; autoTopUpAmount?: number },
+    @Body(new JoiValidationPipe(UpdateBucketPropertiesSchema))
+    form: {
+      id: string;
+      autoTopUpEnabled: boolean;
+      autoTopUpThreshold?: number;
+      autoTopUpAmount?: number;
+    },
     @Query('organizationId') requestedOrganizationId: string,
     @CurrentAuth() auth: OrganizationAuthContext,
   ) {
@@ -132,10 +170,7 @@ export class CurrencyController {
     @Query('organizationId') organizationId: string,
     @CurrentAuth() auth: OrganizationAuthContext,
   ) {
-    const effectiveOrganizationId = resolveOrganizationId(
-      auth,
-      organizationId,
-    );
+    const effectiveOrganizationId = resolveOrganizationId(auth, organizationId);
     const currencies = await this.currencyService.searchNonOrgCurrencies(
       substring,
       effectiveOrganizationId,

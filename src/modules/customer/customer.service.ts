@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ImgBBService } from 'src/modules/imgbb/imgbb.service';
 import { Customer } from '@prisma/client';
+import { PrismaService } from 'src/common/services/prismaService';
 import { UserTypes } from 'src/common/enums/user-types';
 import { AuthService } from '../auth/auth.service';
 import {
@@ -10,6 +11,8 @@ import {
 } from './DTO/customer.dto';
 import { WrongCustomerOtpException } from './exceptions/customer.exception';
 import { CustomerPrismaHelperService } from './customer-prisma-helper.service';
+import { CommonException } from 'src/common/exceptions/common.exception';
+import { StatusCodes } from 'src/common/enums/status-codes';
 import { CacheService } from 'src/common/services/cache/cache.service';
 import {
   Cacheable,
@@ -29,7 +32,100 @@ export class CustomerService {
     private readonly customerPrismaHelperService: CustomerPrismaHelperService,
     private readonly cacheService: CacheService,
     private readonly imgbbService: ImgBBService,
+    private readonly prisma: PrismaService,
   ) {}
+
+  async getMyProfile(customerId: string) {
+    const customer = await this.prisma.customer.findUnique({
+      where: { id: customerId },
+      include: { metaFlags: true },
+    });
+
+    if (!customer) {
+      throw new CommonException('Customer not found', StatusCodes.NOT_FOUND);
+    }
+
+    return customer;
+  }
+
+  async updateMyProfile(customerId: string, form: { name?: string }) {
+    return this.prisma.customer.update({
+      where: { id: customerId },
+      data: {
+        ...(form.name !== undefined && { name: form.name }),
+      },
+    });
+  }
+
+  async getMyWallets(customerId: string) {
+    return this.prisma.customerWallet.findMany({
+      where: { customerId },
+      orderBy: [{ organizationId: 'asc' }, { currencyCode: 'asc' }],
+    });
+  }
+
+  async getMyOrders(customerId: string, page = 1, limit = 20) {
+    const take = Math.min(Math.max(limit, 1), 100);
+    const skip = (Math.max(page, 1) - 1) * take;
+
+    const [items, total] = await Promise.all([
+      this.prisma.customerOrganizationOrder.findMany({
+        where: { customerId },
+        include: {
+          customerEarningAmountDetail: { include: { coin: true } },
+          customerBurningAmountDetail: {
+            include: { cash: true, coin: true },
+          },
+          statusHistory: { orderBy: { timestamp: 'desc' } },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take,
+      }),
+      this.prisma.customerOrganizationOrder.count({ where: { customerId } }),
+    ]);
+
+    return {
+      items,
+      metadata: {
+        currentPage: Math.max(page, 1),
+        totalPages: Math.ceil(total / take),
+        totalItems: total,
+        itemsPerPage: take,
+      },
+    };
+  }
+
+  async getMyStatement(
+    customerId: string,
+    organizationId: string,
+    currencyCode: string,
+  ) {
+    const wallet = await this.prisma.customerWallet.findUnique({
+      where: {
+        customer_id_organization_currency_code: {
+          customerId,
+          organizationId,
+          currencyCode,
+        },
+      },
+    });
+
+    if (!wallet) {
+      throw new CommonException(
+        'Wallet not found for this organization and currency',
+        StatusCodes.NOT_FOUND,
+      );
+    }
+
+    const entries = await this.prisma.loyaltyLedgerEntry.findMany({
+      where: { customerId, organizationId, currencyCode },
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+    });
+
+    return { wallet, entries };
+  }
 
   async findOrCreateCustomersAndProceedPhoneAuthentication(
     form: OtpPhoneFindOrCreateCustomerForm,
@@ -231,12 +327,12 @@ export class CustomerService {
     ttl: 60, // 1 minute TTL as specified
     serviceName: 'CustomerService',
     methodName: 'getTopCustomersForLeaderBoard',
-    cacheKeyParams: (args) => ({ interval: args[0] || 48, organizationId: args[1] }),
+    cacheKeyParams: (args) => ({
+      interval: args[0] || 48,
+      organizationId: args[1],
+    }),
   })
-  async getTopCustomersForLeaderBoard(
-    interval = 48,
-    organizationId?: string,
-  ) {
+  async getTopCustomersForLeaderBoard(interval = 48, organizationId?: string) {
     this.logger.debug(
       `Cache miss for leaderboard with interval: ${interval}h org=${organizationId}`,
     );

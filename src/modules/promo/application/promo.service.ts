@@ -19,38 +19,38 @@ import {
   PromotionRepositoryService,
   PromotionQuery,
   PromotionRecord,
-} from './promotion-repository.service';
+} from '../promotion-repository.service';
 import {
   ConflictResolverService,
   ConflictResolution,
   ConflictStrategy,
-} from './conflict-resolver.service';
+} from '../conflict-resolver.service';
 import {
   DiscountEngineService,
   DiscountResult2,
   DiscountLine,
-} from './discount-engine.service';
+} from '../discount-engine.service';
 import {
   CouponManagerService,
   CouponAllocation,
   CouponBlock,
   CouponClaim,
-} from './coupon-manager.service';
+} from '../coupon-manager.service';
 import {
   ClaimManagerService,
   ClaimInput,
   ClaimRecord,
   ClaimQuery,
-} from './claim-manager.service';
-import { PromoEventPublisherService } from './promo-event-publisher.service';
+} from '../claim-manager.service';
+import { PromoEventPublisherService } from '../promo-event-publisher.service';
 import {
   CouponValidatorService,
   CouponValidationInput,
-} from './coupon-validator.service';
+} from '../coupon-validator.service';
 import {
   SephoraResponseMapper,
   SephoraPromoResponse,
-} from './sephora-response.mapper';
+} from '../sephora-response.mapper';
 
 export interface EvaluatePromotionsInput {
   organizationId: string;

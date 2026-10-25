@@ -64,22 +64,47 @@ export class FXEngineService {
       lockDurationMinutes = 15,
     } = input;
 
-    if (amount <= 0) {
+    if (!Number.isFinite(amount) || amount <= 0) {
       throw new CommonException(
         'Amount must be greater than zero',
         StatusCodes.BAD_REQUEST,
       );
     }
+    if (
+      !Number.isInteger(lockDurationMinutes) ||
+      lockDurationMinutes < 1 ||
+      lockDurationMinutes > 1440
+    ) {
+      throw new CommonException(
+        'lockDurationMinutes must be an integer between 1 and 1440',
+        StatusCodes.BAD_REQUEST,
+      );
+    }
 
-    // Fetch the active exchange rate
-    const rateRecord = await this.prisma.exchangeRateHistory.findFirst({
-      where: {
-        currencyId: fromCurrency,
-        physicalCurrencyCode: toCurrency,
-        isActive: true,
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+    const now = new Date();
+
+    // Prefer a live, unconsumed lock; otherwise fall back to the latest
+    // unlocked rate. Expired locks must never be used silently.
+    const rateRecord =
+      (await this.prisma.exchangeRateHistory.findFirst({
+        where: {
+          currencyId: fromCurrency,
+          physicalCurrencyCode: toCurrency,
+          isActive: true,
+          lockedUntil: { gt: now },
+          consumedAt: null,
+        },
+        orderBy: { createdAt: 'desc' },
+      })) ??
+      (await this.prisma.exchangeRateHistory.findFirst({
+        where: {
+          currencyId: fromCurrency,
+          physicalCurrencyCode: toCurrency,
+          isActive: true,
+          OR: [{ lockedUntil: null }, { lockedUntil: { lte: now } }],
+        },
+        orderBy: { createdAt: 'desc' },
+      }));
 
     if (!rateRecord) {
       throw new CommonException(
@@ -93,18 +118,41 @@ export class FXEngineService {
     const effectiveRate = rate * (1 + spread);
     const toAmount = amount * effectiveRate;
 
-    const referenceId = `FX-${Date.now()}-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
+    const referenceId = `FX-${Date.now()}-${Math.random()
+      .toString(36)
+      .substring(2, 9)
+      .toUpperCase()}`;
 
     let lockedUntil: Date | undefined;
     if (lockRate) {
-      lockedUntil = new Date(Date.now() + lockDurationMinutes * 60 * 1000);
-      await this.prisma.exchangeRateHistory.update({
-        where: { id: rateRecord.id },
-        data: {
-          lockedBy: tenantId || 'SYSTEM',
-          lockedUntil,
-        },
-      });
+      const existingLock =
+        rateRecord.lockedUntil && rateRecord.lockedUntil > now
+          ? rateRecord.lockedUntil
+          : undefined;
+
+      if (existingLock) {
+        lockedUntil = existingLock;
+        const claimed = await this.prisma.exchangeRateHistory.updateMany({
+          where: { id: rateRecord.id, consumedAt: null },
+          data: { consumedAt: new Date() },
+        });
+
+        if (claimed.count === 0) {
+          throw new CommonException(
+            'The locked exchange rate has already been consumed',
+            StatusCodes.CONFLICT,
+          );
+        }
+      } else {
+        lockedUntil = new Date(Date.now() + lockDurationMinutes * 60 * 1000);
+        await this.prisma.exchangeRateHistory.update({
+          where: { id: rateRecord.id },
+          data: {
+            lockedBy: tenantId || 'SYSTEM',
+            lockedUntil,
+          },
+        });
+      }
     }
 
     // Write audit log
@@ -124,7 +172,9 @@ export class FXEngineService {
     });
 
     this.logger.log(
-      `FX Convert: ${amount} ${fromCurrency} → ${toAmount.toFixed(2)} ${toCurrency} (rate: ${effectiveRate})`,
+      `FX Convert: ${amount} ${fromCurrency} → ${toAmount.toFixed(
+        2,
+      )} ${toCurrency} (rate: ${effectiveRate})`,
     );
 
     return {
@@ -149,7 +199,30 @@ export class FXEngineService {
     rate: number;
     lockedUntil: Date;
   }> {
-    const { currencyCode, physicalCurrencyCode, rate, lockedBy, lockDurationMinutes } = input;
+    const {
+      currencyCode,
+      physicalCurrencyCode,
+      rate,
+      lockedBy,
+      lockDurationMinutes,
+    } = input;
+
+    if (!Number.isFinite(rate) || rate <= 0) {
+      throw new CommonException(
+        'rate must be greater than zero',
+        StatusCodes.BAD_REQUEST,
+      );
+    }
+    if (
+      !Number.isInteger(lockDurationMinutes) ||
+      lockDurationMinutes < 1 ||
+      lockDurationMinutes > 1440
+    ) {
+      throw new CommonException(
+        'lockDurationMinutes must be an integer between 1 and 1440',
+        StatusCodes.BAD_REQUEST,
+      );
+    }
 
     const lockedUntil = new Date(Date.now() + lockDurationMinutes * 60 * 1000);
 
@@ -181,6 +254,17 @@ export class FXEngineService {
     rates: Array<{ rate: number; source: string; createdAt: Date }>;
   }> {
     const { currencyCode, physicalCurrencyCode, startDate, endDate } = input;
+
+    if (
+      Number.isNaN(startDate.getTime()) ||
+      Number.isNaN(endDate.getTime()) ||
+      startDate > endDate
+    ) {
+      throw new CommonException(
+        'A valid startDate and endDate range is required',
+        StatusCodes.BAD_REQUEST,
+      );
+    }
 
     const records = await this.prisma.exchangeRateHistory.findMany({
       where: {
@@ -236,6 +320,17 @@ export class FXEngineService {
   }> {
     const { tenantId, startDate, endDate } = input;
 
+    if (
+      Number.isNaN(startDate.getTime()) ||
+      Number.isNaN(endDate.getTime()) ||
+      startDate > endDate
+    ) {
+      throw new CommonException(
+        'A valid startDate and endDate range is required',
+        StatusCodes.BAD_REQUEST,
+      );
+    }
+
     const transactions = await this.prisma.fxAuditLog.findMany({
       where: {
         tenantId,
@@ -258,7 +353,8 @@ export class FXEngineService {
     );
     const averageRate =
       totalConversions > 0
-        ? transactions.reduce((sum, t) => sum + Number(t.rate), 0) / totalConversions
+        ? transactions.reduce((sum, t) => sum + Number(t.rate), 0) /
+          totalConversions
         : 0;
 
     return {

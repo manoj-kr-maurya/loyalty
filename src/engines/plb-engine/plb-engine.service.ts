@@ -78,7 +78,18 @@ export class PLBEngineService {
     cycleType: string;
     tiers: number;
   }> {
-    const { organizationId, name, description, metricType, metricKey, cycleType, cycleStart, cycleEnd, tiers, isActive } = input;
+    const {
+      organizationId,
+      name,
+      description,
+      metricType,
+      metricKey,
+      cycleType,
+      cycleStart,
+      cycleEnd,
+      tiers,
+      isActive,
+    } = input;
 
     // Validate tiers
     const sorted = [...tiers].sort((a, b) => a.level - b.level);
@@ -91,7 +102,9 @@ export class PLBEngineService {
       }
       if (i > 0 && sorted[i].minThreshold <= sorted[i - 1].minThreshold) {
         throw new CommonException(
-          `Tier ${sorted[i].level} threshold must be greater than tier ${sorted[i - 1].level}`,
+          `Tier ${sorted[i].level} threshold must be greater than tier ${
+            sorted[i - 1].level
+          }`,
           StatusCodes.BAD_REQUEST,
         );
       }
@@ -117,20 +130,29 @@ export class PLBEngineService {
       },
     });
 
-    this.logger.log(`PLB program created: ${name} (${cycleType}) with ${tiers.length} tiers`);
-    return { id: program.id, name: program.name, cycleType: program.cycleType, tiers: tiers.length };
+    this.logger.log(
+      `PLB program created: ${name} (${cycleType}) with ${tiers.length} tiers`,
+    );
+    return {
+      id: program.id,
+      name: program.name,
+      cycleType: program.cycleType,
+      tiers: tiers.length,
+    };
   }
 
   /**
    * Get all PLB programs for an organization.
    */
-  async getPrograms(organizationId: string): Promise<Array<{
-    id: string;
-    name: string;
-    cycleType: string;
-    isActive: boolean;
-    tiers: number;
-  }>> {
+  async getPrograms(organizationId: string): Promise<
+    Array<{
+      id: string;
+      name: string;
+      cycleType: string;
+      isActive: boolean;
+      tiers: number;
+    }>
+  > {
     const programs = await this.prisma.pLBProgram.findMany({
       where: { organizationId },
     });
@@ -155,22 +177,47 @@ export class PLBEngineService {
     programId: string;
     metricValue: number;
   }> {
-    const { organizationId, programId, customerId, metricValue, periodStart, periodEnd, metadata } = input;
+    const {
+      organizationId,
+      programId,
+      customerId,
+      metricValue,
+      periodStart,
+      periodEnd,
+    } = input;
 
-    // Verify program exists
-    const program = await this.prisma.pLBProgram.findUnique({
-      where: { id: programId },
-    });
-
-    if (!program) {
-      throw new CommonException('PLB program not found', StatusCodes.NOT_FOUND);
+    if (!Number.isFinite(metricValue) || metricValue < 0) {
+      throw new CommonException(
+        'metricValue must be a non-negative number',
+        StatusCodes.BAD_REQUEST,
+      );
+    }
+    if (periodStart > periodEnd) {
+      throw new CommonException(
+        'periodStart must be before or equal to periodEnd',
+        StatusCodes.BAD_REQUEST,
+      );
     }
 
+    const program = await this.assertProgramOwned(programId, organizationId);
     const metricDefs = program.metricDefinitions as Record<string, any>;
     const metricName = metricDefs?.metricKey || 'default';
 
-    const metric = await this.prisma.pLBMetric.create({
-      data: {
+    const metric = await this.prisma.pLBMetric.upsert({
+      where: {
+        plb_metric_period_unique: {
+          programId,
+          entityId: customerId,
+          periodStart,
+          periodEnd,
+          metricName,
+        },
+      },
+      update: {
+        metricValue,
+        recordedAt: new Date(),
+      },
+      create: {
         programId,
         entityId: customerId,
         entityType: 'CUSTOMER',
@@ -183,8 +230,15 @@ export class PLBEngineService {
       },
     });
 
-    this.logger.log(`Metric recorded: entity=${customerId} program=${programId} value=${metricValue}`);
-    return { id: metric.id, entityId: customerId, programId, metricValue: Number(metric.metricValue) };
+    this.logger.log(
+      `Metric recorded: entity=${customerId} program=${programId} value=${metricValue}`,
+    );
+    return {
+      id: metric.id,
+      entityId: customerId,
+      programId,
+      metricValue: Number(metric.metricValue),
+    };
   }
 
   // ─── Bonus Calculation ────────────────────────────────
@@ -199,17 +253,17 @@ export class PLBEngineService {
     periodStart: Date;
     periodEnd: Date;
   }): Promise<PLBBonusOutput> {
-    const { organizationId, programId, customerId, periodStart, periodEnd } = input;
+    const { organizationId, programId, customerId, periodStart, periodEnd } =
+      input;
 
-    // Get program
-    const program = await this.prisma.pLBProgram.findUnique({
-      where: { id: programId },
-    });
-
-    if (!program) {
-      throw new CommonException('PLB program not found', StatusCodes.NOT_FOUND);
+    if (periodStart > periodEnd) {
+      throw new CommonException(
+        'periodStart must be before or equal to periodEnd',
+        StatusCodes.BAD_REQUEST,
+      );
     }
 
+    const program = await this.assertProgramOwned(programId, organizationId);
     const slabDefs = (program.slabDefinitions as any[]) || [];
 
     // Aggregate metrics for the period
@@ -229,7 +283,7 @@ export class PLBEngineService {
 
     // Find the highest slab achieved (sorted by min ascending)
     const sortedSlabs = [...slabDefs].sort((a, b) => a.min - b.min);
-    let achievedSlab: typeof sortedSlabs[0] | null = null;
+    let achievedSlab: (typeof sortedSlabs)[0] | null = null;
     for (const slab of sortedSlabs) {
       if (totalMetricValue >= slab.min) {
         if (!slab.max || totalMetricValue <= slab.max) {
@@ -260,7 +314,8 @@ export class PLBEngineService {
     let bonusAmount = 0;
     switch (achievedSlab.incentiveType) {
       case 'PERCENTAGE':
-        bonusAmount = totalMetricValue * (Number(achievedSlab.incentiveValue) / 100);
+        bonusAmount =
+          totalMetricValue * (Number(achievedSlab.incentiveValue) / 100);
         break;
       case 'ABSOLUTE':
         bonusAmount = Number(achievedSlab.incentiveValue);
@@ -271,17 +326,35 @@ export class PLBEngineService {
     }
 
     // Apply cap
-    const bonusCap = achievedSlab.bonusCap ? Number(achievedSlab.bonusCap) : null;
+    const bonusCap = achievedSlab.bonusCap
+      ? Number(achievedSlab.bonusCap)
+      : null;
     const finalBonus = bonusCap ? Math.min(bonusAmount, bonusCap) : bonusAmount;
 
-    // Persist bonus record
-    await this.prisma.pLBBonus.create({
-      data: {
+    const slabName = `Slab ${sortedSlabs.indexOf(achievedSlab) + 1}`;
+
+    // Persist exactly one bonus per customer/cycle. Repeated calculation calls
+    // update the pending record rather than creating duplicate liabilities.
+    await this.prisma.pLBBonus.upsert({
+      where: {
+        plb_bonus_cycle_unique: {
+          programId,
+          entityId: customerId,
+          cycleStart: periodStart,
+          cycleEnd: periodEnd,
+        },
+      },
+      update: {
+        slabName,
+        incentiveType: achievedSlab.incentiveType,
+        incentiveValue: Number(achievedSlab.incentiveValue),
+      },
+      create: {
         programId,
         entityId: customerId,
         cycleStart: periodStart,
         cycleEnd: periodEnd,
-        slabName: `Slab ${sortedSlabs.indexOf(achievedSlab) + 1}`,
+        slabName,
         incentiveType: achievedSlab.incentiveType,
         incentiveValue: Number(achievedSlab.incentiveValue),
         currency: 'INR',
@@ -290,7 +363,9 @@ export class PLBEngineService {
     });
 
     this.logger.log(
-      `Bonus calculated: customer=${customerId} program=${program.name} slab=${sortedSlabs.indexOf(achievedSlab) + 1} bonus=${finalBonus}`,
+      `Bonus calculated: customer=${customerId} program=${program.name} slab=${
+        sortedSlabs.indexOf(achievedSlab) + 1
+      } bonus=${finalBonus}`,
     );
 
     return {
@@ -301,7 +376,7 @@ export class PLBEngineService {
       cycleStart: periodStart,
       cycleEnd: periodEnd,
       metricValue: totalMetricValue,
-      tierAchieved: `Slab ${sortedSlabs.indexOf(achievedSlab) + 1}`,
+      tierAchieved: slabName,
       bonusType: achievedSlab.incentiveType,
       bonusValue: Number(achievedSlab.incentiveValue),
       bonusAmount,
@@ -368,22 +443,30 @@ export class PLBEngineService {
   }> {
     const { customerId, organizationId, periodStart, periodEnd } = input;
 
+    const orgPrograms = await this.prisma.pLBProgram.findMany({
+      where: { organizationId },
+      select: { id: true, name: true },
+    });
+    const orgProgramIds = orgPrograms.map((program) => program.id);
+
     const bonuses = await this.prisma.pLBBonus.findMany({
       where: {
         entityId: customerId,
+        programId: { in: orgProgramIds },
         cycleStart: { gte: periodStart },
         cycleEnd: { lte: periodEnd },
       },
     });
 
-    const totalBonus = bonuses.reduce((sum, b) => sum + Number(b.incentiveValue), 0);
+    const totalBonus = bonuses.reduce(
+      (sum, b) => sum + Number(b.incentiveValue),
+      0,
+    );
 
-    // Get program names
     const programIds = [...new Set(bonuses.map((b) => b.programId))];
-    const programs = await this.prisma.pLBProgram.findMany({
-      where: { id: { in: programIds } },
-      select: { id: true, name: true },
-    });
+    const programs = orgPrograms.filter((program) =>
+      programIds.includes(program.id),
+    );
     const programMap = new Map(programs.map((p) => [p.id, p.name]));
 
     return {
@@ -399,5 +482,17 @@ export class PLBEngineService {
         bonusAmount: Number(b.incentiveValue),
       })),
     };
+  }
+
+  private async assertProgramOwned(programId: string, organizationId: string) {
+    const program = await this.prisma.pLBProgram.findFirst({
+      where: { id: programId, organizationId },
+    });
+
+    if (!program) {
+      throw new CommonException('PLB program not found', StatusCodes.NOT_FOUND);
+    }
+
+    return program;
   }
 }

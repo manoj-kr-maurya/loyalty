@@ -64,11 +64,19 @@ export class DiscountEngineService {
     awards: RuleEvaluationResult[],
     maxDiscount?: { amount: number; percentage: number },
   ): DiscountResult2 {
+    if (!Number.isFinite(transactionAmount) || transactionAmount < 0) {
+      throw new Error('transactionAmount must be a non-negative number');
+    }
+
     const discounts: DiscountLine[] = [];
 
     for (const result of awards) {
       for (const award of result.awards) {
-        const discount = this.awardToDiscount(award, transactionAmount, currency);
+        const discount = this.awardToDiscount(
+          award,
+          transactionAmount,
+          currency,
+        );
         discounts.push(discount);
       }
     }
@@ -77,9 +85,20 @@ export class DiscountEngineService {
 
     // Apply caps
     let wasCapped = false;
-    let capApplied: { type: 'ABSOLUTE' | 'PERCENTAGE'; value: number } | undefined;
+    let capApplied:
+      | { type: 'ABSOLUTE' | 'PERCENTAGE'; value: number }
+      | undefined;
 
     if (maxDiscount) {
+      if (
+        !Number.isFinite(maxDiscount.amount) ||
+        !Number.isFinite(maxDiscount.percentage) ||
+        maxDiscount.amount < 0 ||
+        maxDiscount.percentage < 0
+      ) {
+        throw new Error('Discount caps must be non-negative numbers');
+      }
+
       // Absolute cap
       if (maxDiscount.amount > 0 && totalDiscount > maxDiscount.amount) {
         wasCapped = true;
@@ -119,6 +138,13 @@ export class DiscountEngineService {
     transactionAmount: number,
     currency: string,
   ): DiscountLine {
+    if (!Number.isFinite(award.amount) || award.amount < 0) {
+      throw new Error('Award amount must be a non-negative number');
+    }
+    if (award.rewardMode === 'PERCENTAGE' && award.amount > 100) {
+      throw new Error('Percentage awards cannot exceed 100');
+    }
+
     let discountAmount: number;
 
     switch (award.rewardMode) {
@@ -160,6 +186,8 @@ export class DiscountEngineService {
         discountAmount = award.amount;
     }
 
+    discountAmount = Math.max(0, Math.min(discountAmount, transactionAmount));
+
     const discountPercentage =
       transactionAmount > 0
         ? Math.round((discountAmount / transactionAmount) * 10000) / 100
@@ -179,7 +207,11 @@ export class DiscountEngineService {
   /**
    * Build a human-readable description for the discount.
    */
-  private buildDescription(award: Award, amount: number, currency: string): string {
+  private buildDescription(
+    award: Award,
+    amount: number,
+    currency: string,
+  ): string {
     switch (award.rewardMode) {
       case 'ABSOLUTE':
         return `${award.ruleName}: Flat ${currency} ${amount} off`;

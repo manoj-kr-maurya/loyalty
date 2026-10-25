@@ -1,4 +1,9 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import {
+  BadGatewayException,
+  Injectable,
+  Logger,
+  OnModuleInit,
+} from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { Prisma } from '@prisma/client';
 import { firstValueFrom } from 'rxjs';
@@ -255,6 +260,33 @@ export class WebhookDispatcherService implements OnModuleInit {
     }
 
     return result;
+  }
+
+  async testEndpoint(endpoint: { id: string; url: string; secret: string }) {
+    const payload = {
+      id: `test-${Date.now()}`,
+      type: 'webhook.test',
+      organizationId: null,
+      aggregateId: endpoint.id,
+      createdAt: new Date().toISOString(),
+      data: { message: 'JAS loyalty webhook test delivery' },
+    };
+
+    try {
+      const response = await this.post(endpoint, {
+        id: payload.id,
+        eventType: payload.type,
+        payload,
+      });
+      return {
+        delivered: true,
+        status: response.status,
+        testedAt: new Date().toISOString(),
+      };
+    } catch (error) {
+      const message = this.describe(error);
+      throw new BadGatewayException(`Webhook test failed: ${message}`);
+    }
   }
 
   private async post(

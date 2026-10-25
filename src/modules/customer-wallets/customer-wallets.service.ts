@@ -25,6 +25,7 @@ export class CustomerWalletService {
 
   async initialize(
     customerId: string,
+    organizationId: string,
     currencyCode: string,
     prismaService?: PrismaService,
   ): Promise<CustomerWalletAggregate> {
@@ -32,11 +33,16 @@ export class CustomerWalletService {
 
     const wallet = await prisma.customerWallet.upsert({
       where: {
-        customer_id_currency_code: { customerId, currencyCode },
+        customer_id_organization_currency_code: {
+          customerId,
+          organizationId,
+          currencyCode,
+        },
       },
       update: {}, // No updates if the wallet exists
       create: {
         customerId,
+        organizationId,
         currencyCode,
         availableBalance: 0,
         blockedBalance: 0,
@@ -46,7 +52,11 @@ export class CustomerWalletService {
       },
     });
 
-    return new CustomerWalletAggregate(prisma, this.customerWalletsQueueJobProducer, wallet);
+    return new CustomerWalletAggregate(
+      prisma,
+      this.customerWalletsQueueJobProducer,
+      wallet,
+    );
   }
 
   async fetchCustomerWallets(
@@ -66,6 +76,7 @@ export class CustomerWalletService {
     // Build base where clause
     const where: Prisma.CustomerWalletWhereInput = {
       customerId,
+      organizationId,
       currencyCode: { in: orgCurrencyCodes },
       availableBalance: { gt: 0 },
     };
@@ -179,6 +190,7 @@ export class CustomerWalletService {
       where: {
         id: currencyWalletId,
         customerId,
+        organizationId,
         currencyCode: { in: orgCurrencies.map((currency) => currency.code) },
       },
       select: { id: true },
@@ -220,10 +232,7 @@ export class CustomerWalletService {
     };
   }
 
-  async fetchBroadCustomerBalance(
-    customerId: string,
-    organizationId: string,
-  ) {
+  async fetchBroadCustomerBalance(customerId: string, organizationId: string) {
     const orgCurrencies = await this.prisma.currency.findMany({
       where: { organizationId },
       select: { code: true },

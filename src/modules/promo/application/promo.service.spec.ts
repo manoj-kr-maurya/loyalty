@@ -12,14 +12,14 @@ import { AuditEngineService } from 'src/modules/audit-engine/audit-engine.servic
 import {
   PromotionRepositoryService,
   PromotionRecord,
-} from './promotion-repository.service';
-import { ConflictResolverService } from './conflict-resolver.service';
-import { DiscountEngineService } from './discount-engine.service';
-import { CouponManagerService, CouponBlock } from './coupon-manager.service';
-import { ClaimManagerService, ClaimRecord } from './claim-manager.service';
-import { PromoEventPublisherService } from './promo-event-publisher.service';
-import { CouponValidatorService } from './coupon-validator.service';
-import { SephoraResponseMapper } from './sephora-response.mapper';
+} from '../promotion-repository.service';
+import { ConflictResolverService } from '../conflict-resolver.service';
+import { DiscountEngineService } from '../discount-engine.service';
+import { CouponManagerService, CouponBlock } from '../coupon-manager.service';
+import { ClaimManagerService, ClaimRecord } from '../claim-manager.service';
+import { PromoEventPublisherService } from '../promo-event-publisher.service';
+import { CouponValidatorService } from '../coupon-validator.service';
+import { SephoraResponseMapper } from '../sephora-response.mapper';
 import { PrismaService } from 'src/common/services/prismaService';
 import { NotFoundException } from '@nestjs/common';
 

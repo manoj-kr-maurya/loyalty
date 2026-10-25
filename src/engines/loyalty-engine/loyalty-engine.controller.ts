@@ -251,6 +251,57 @@ export class LoyaltyEngineController {
     return this.webhooks.deleteEndpoint(id, organizationId);
   }
 
+  @Post('webhooks/:id/rotate-secret')
+  @RequireScopes('webhooks:manage')
+  @ApiOperation({ summary: 'Rotate a webhook signing secret' })
+  async rotateWebhookSecret(
+    @Param('id') id: string,
+    @Query() query: OrganizationQueryDto,
+    @CurrentAuth() auth: OrganizationAuthContext,
+  ) {
+    const organizationId = resolveOrganizationId(auth, query.organizationId);
+
+    return this.webhooks.rotateSecret(id, organizationId);
+  }
+
+  @Post('webhooks/:id/test')
+  @RequireScopes('webhooks:manage')
+  @ApiOperation({ summary: 'Send a synchronous test delivery' })
+  async testWebhook(
+    @Param('id') id: string,
+    @Query() query: OrganizationQueryDto,
+    @CurrentAuth() auth: OrganizationAuthContext,
+  ) {
+    const organizationId = resolveOrganizationId(auth, query.organizationId);
+
+    return this.webhooks.testEndpoint(id, organizationId);
+  }
+
+  @Get('webhooks/dead-letters')
+  @RequireScopes('webhooks:manage')
+  @ApiOperation({ summary: 'List exhausted webhook deliveries' })
+  async listDeadLetters(
+    @Query() query: OrganizationQueryDto & { limit?: number },
+    @CurrentAuth() auth: OrganizationAuthContext,
+  ) {
+    const organizationId = resolveOrganizationId(auth, query.organizationId);
+
+    return this.webhooks.listDeadLetters(organizationId, query.limit);
+  }
+
+  @Post('webhooks/deliveries/:id/retry')
+  @RequireScopes('webhooks:manage')
+  @ApiOperation({ summary: 'Requeue an exhausted webhook delivery' })
+  async retryWebhookDelivery(
+    @Param('id') id: string,
+    @Query() query: OrganizationQueryDto,
+    @CurrentAuth() auth: OrganizationAuthContext,
+  ) {
+    const organizationId = resolveOrganizationId(auth, query.organizationId);
+
+    return this.webhooks.retryDelivery(id, organizationId);
+  }
+
   @Get('webhooks/:id/deliveries')
   @RequireScopes('webhooks:manage')
   @ApiOperation({ summary: 'List webhook delivery attempts' })

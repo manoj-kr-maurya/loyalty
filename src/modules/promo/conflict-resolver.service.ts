@@ -74,7 +74,13 @@ export class ConflictResolverService {
         this.resolveExclusive(sorted, winners, excluded, resolvedAwards);
         break;
       case 'STACKABLE':
-        this.resolveStackable(sorted, config.maxStackable ?? 3, winners, excluded, resolvedAwards);
+        this.resolveStackable(
+          sorted,
+          config.maxStackable ?? 3,
+          winners,
+          excluded,
+          resolvedAwards,
+        );
         break;
       default:
         this.resolveByPriority(sorted, winners, excluded, resolvedAwards);
@@ -145,8 +151,17 @@ export class ConflictResolverService {
     excluded: { promotion: PromotionRecord; reason: string }[],
     resolvedAwards: RuleEvaluationResult[],
   ): void {
+    const now = new Date();
+    let applied = 0;
+
     for (let i = 0; i < sorted.length; i++) {
-      if (i < maxStackable) {
+      const underLimit = applied < Math.max(1, maxStackable);
+      const withinDates =
+        sorted[i].promotion.startDate <= now &&
+        sorted[i].promotion.endDate >= now;
+
+      if (underLimit && withinDates) {
+        applied += 1;
         winners.push(sorted[i].promotion);
         resolvedAwards.push(sorted[i].result);
       } else {

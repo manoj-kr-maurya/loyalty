@@ -2,8 +2,8 @@ import { MailerModule } from '@nestjs-modules/mailer';
 import { CacheModule } from '@nestjs/cache-manager';
 import { MiddlewareConsumer, Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { APP_INTERCEPTOR } from '@nestjs/core';
-import { WinstonModule } from 'nest-winston';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AppController } from './app.controller';
 import { envEnums } from 'src/config/enums';
 import { envSchema } from 'src/config/env-schema';
@@ -29,7 +29,6 @@ import { ListenerModule } from './modules/listener/listener.module';
 import { ShopModule } from './modules/shop/shop.module';
 import { FXEngineModule } from './engines/fx-engine';
 import { LoyaltyEngineModule } from './engines/loyalty-engine';
-import { PromoEngineModule } from './engines/promo-engine';
 import { PLBEngineModule } from './engines/plb-engine';
 import { ValueExchangeEngineModule } from './engines/value-exchange-engine';
 
@@ -82,12 +81,19 @@ import { ValueExchangeEngineModule } from './engines/value-exchange-engine';
     // ─── Productised Commercial Engines ─────────────────
     FXEngineModule,
     LoyaltyEngineModule,
-    PromoEngineModule,
     PLBEngineModule,
     ValueExchangeEngineModule,
+    ThrottlerModule.forRoot({
+      ttl: 60,
+      limit: 120,
+    }),
   ],
   controllers: [AppController],
   providers: [
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
     {
       provide: APP_INTERCEPTOR,
       useClass: IncomingReqResLoggingInterceptor,

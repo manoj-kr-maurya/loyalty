@@ -8,6 +8,7 @@ import { CustomerWalletService } from '../customer-wallets.service';
 
 interface JobProcessorParams {
   customerId: string;
+  organizationId: string;
   currencyCode: string;
   transactionRef: string;
   newTransaction?: {
@@ -27,6 +28,7 @@ interface JobDefinitionParams {
 
 interface BaseJobProcessorParams {
   customerId: string;
+  organizationId: string;
   currencyCode: string;
   transactionRef: string;
 }
@@ -60,11 +62,13 @@ export class CustomerWalletJobConsumer implements OnModuleInit {
 
   private async handlePointsExpiry({
     customerId,
+    organizationId,
     currencyCode,
     transactionRef,
   }: JobProcessorParams): Promise<void> {
     const initializedPoints = await this.customerWalletService.initialize(
       customerId,
+      organizationId,
       currencyCode,
     );
     await initializedPoints.handleCreditPointsExpiry({
@@ -86,6 +90,7 @@ export class CustomerWalletJobConsumer implements OnModuleInit {
           const initializedCustomerPoints =
             await this.customerWalletService.initialize(
               data.customerId,
+              data.organizationId,
               coin.currencyCode,
             );
 
@@ -113,6 +118,7 @@ export class CustomerWalletJobConsumer implements OnModuleInit {
         const initializedCustomerPoints =
           await this.customerWalletService.initialize(
             data.customerId,
+            data.organizationId,
             earning.currencyCode,
           );
 
@@ -137,11 +143,13 @@ export class CustomerWalletJobConsumer implements OnModuleInit {
 
   private async handlePointsUnblocking({
     customerId,
+    organizationId,
     currencyCode,
     newTransaction,
   }: JobProcessorParams): Promise<void> {
     const initializedPoints = await this.customerWalletService.initialize(
       customerId,
+      organizationId,
       currencyCode,
     );
     await initializedPoints.unblockPoints({

@@ -39,7 +39,10 @@ export class CurrencyService {
       organizationId,
     );
     if (!organization) {
-      throw new CommonException('Organization not found', StatusCodes.NOT_FOUND);
+      throw new CommonException(
+        'Organization not found',
+        StatusCodes.NOT_FOUND,
+      );
     }
     if (organization.role !== 'ADMIN') {
       throw new NotAuthorisedToCreateCurrencyException();
@@ -123,7 +126,10 @@ export class CurrencyService {
       organizationId,
     );
     if (!organization) {
-      throw new CommonException('Organization not found', StatusCodes.NOT_FOUND);
+      throw new CommonException(
+        'Organization not found',
+        StatusCodes.NOT_FOUND,
+      );
     }
     const currencies = await this.searchOrgCurrencies(
       organization.role === OrganizationRoles.ADMIN
@@ -207,9 +213,46 @@ export class CurrencyService {
     organizationId: string,
     currencyCode: string,
     amountToAdd: number,
+    paymentReference: string,
+    paymentAmount: number,
+    paymentProvider?: string,
   ) {
+    if (!Number.isInteger(amountToAdd) || amountToAdd <= 0) {
+      throw new CommonException(
+        'Currency amount must be a positive integer',
+        StatusCodes.BAD_REQUEST,
+      );
+    }
+
     return this.prisma.$transaction(async (prismaTransaction) => {
-      // Create organization order with prismaTransaction
+      const existing = await prismaTransaction.organizationOrder.findUnique({
+        where: { paymentReference },
+        include: { details: true },
+      });
+
+      if (existing) {
+        if (
+          existing.organizationId !== organizationId ||
+          existing.details?.currencyCode !== currencyCode ||
+          existing.amount !== amountToAdd
+        ) {
+          throw new CommonException(
+            'Payment reference has already been used',
+            StatusCodes.CONFLICT,
+          );
+        }
+        return prismaTransaction.currencyBucket.findMany({
+          where: { organizationId },
+        });
+      }
+
+      const { rate } = await this.getPurchaseCurrency(
+        prismaTransaction,
+        organizationId,
+        currencyCode,
+      );
+      this.assertPaymentAmount(amountToAdd * rate, paymentAmount);
+
       const organizationOrder =
         await this.organizationOrderService.createOrganizationOrder(
           organizationId,
@@ -218,41 +261,244 @@ export class CurrencyService {
             orderType: OrganizationOrderType.CURRENCY_PURCHASE,
             details: { currencyCode },
           },
-          prismaTransaction, // Pass prismaTransaction to the function
+          prismaTransaction,
         );
 
-      // Update the organization's currency bucket with prismaTransaction
-      const updatedOrganization =
-        await this.currencyPrismaHelperService.updateOrganizationCurrencyBucketAndReturnOrganization(
-          organizationId,
-          currencyCode,
-          amountToAdd,
-          prismaTransaction, // Pass prismaTransaction to the function
-        );
+      return this.completeCurrencyPurchase(
+        prismaTransaction,
+        organizationOrder,
+        currencyCode,
+        amountToAdd,
+        paymentReference,
+        paymentAmount,
+        paymentProvider,
+      );
+    });
+  }
 
-      const metaFlags = await this.prisma.metaFlagsForOrganization.findUnique({
-        where: { organizationId },
-        select: { firstCurrencyBalanceAdded: true },
+  async confirmCurrencyPurchase(input: {
+    orderId: string;
+    paymentReference: string;
+    paymentAmount: number;
+    paymentProvider?: string;
+  }) {
+    return this.prisma.$transaction(async (prismaTransaction) => {
+      const order = await prismaTransaction.organizationOrder.findUnique({
+        where: { id: input.orderId },
+        include: { details: true },
       });
 
-      if (!metaFlags?.firstCurrencyBalanceAdded) {
-        await this.prisma.metaFlagsForOrganization.update({
-          where: { organizationId },
-          data: { firstCurrencyBalanceAdded: true },
-        });
+      if (!order) {
+        throw new CommonException(
+          `Order ${input.orderId} not found`,
+          StatusCodes.NOT_FOUND,
+        );
       }
 
-      // Update the organization order status to COMPLETED with prismaTransaction
-      await this.organizationOrderService.updateOrganizationOrder(
-        organizationOrder.id,
-        {
-          newStatus: OrganizationOrderStatus.COMPLETED,
+      if (order.orderType !== OrganizationOrderType.CURRENCY_PURCHASE) {
+        throw new CommonException(
+          'Only currency purchase orders can be confirmed here',
+          StatusCodes.BAD_REQUEST,
+        );
+      }
+
+      if (!order.details?.currencyCode) {
+        throw new CommonException(
+          'Currency purchase order has no currency code',
+          StatusCodes.BAD_REQUEST,
+        );
+      }
+
+      if (order.orderStatus === OrganizationOrderStatus.COMPLETED) {
+        if (order.paymentReference === input.paymentReference) {
+          return order;
+        }
+        throw new CommonException(
+          'Order is already completed with another payment reference',
+          StatusCodes.CONFLICT,
+        );
+      }
+
+      if (
+        order.orderStatus !== OrganizationOrderStatus.PENDING &&
+        order.orderStatus !== OrganizationOrderStatus.PROCESSING
+      ) {
+        throw new CommonException(
+          `Order is ${order.orderStatus} and cannot be paid`,
+          StatusCodes.BAD_REQUEST,
+        );
+      }
+
+      const claimed = await prismaTransaction.organizationOrder.updateMany({
+        where: {
+          id: order.id,
+          orderStatus: {
+            in: [
+              OrganizationOrderStatus.PENDING,
+              OrganizationOrderStatus.PROCESSING,
+            ],
+          },
         },
-        prismaTransaction, // Pass prismaTransaction to the function
+        data: { orderStatus: OrganizationOrderStatus.PROCESSING },
+      });
+
+      if (claimed.count === 0) {
+        const current = await prismaTransaction.organizationOrder.findUnique({
+          where: { id: order.id },
+        });
+
+        if (
+          current?.orderStatus === OrganizationOrderStatus.COMPLETED &&
+          current.paymentReference === input.paymentReference
+        ) {
+          return current;
+        }
+
+        throw new CommonException(
+          'Order is already being processed with another payment',
+          StatusCodes.CONFLICT,
+        );
+      }
+
+      const duplicate = await prismaTransaction.organizationOrder.findUnique({
+        where: { paymentReference: input.paymentReference },
+        select: { id: true },
+      });
+
+      if (duplicate && duplicate.id !== order.id) {
+        throw new CommonException(
+          'Payment reference has already been used',
+          StatusCodes.CONFLICT,
+        );
+      }
+
+      const { rate } = await this.getPurchaseCurrency(
+        prismaTransaction,
+        order.organizationId,
+        order.details.currencyCode,
+      );
+      this.assertPaymentAmount(order.amount * rate, input.paymentAmount);
+
+      await this.completeCurrencyPurchase(
+        prismaTransaction,
+        order,
+        order.details.currencyCode,
+        order.amount,
+        input.paymentReference,
+        input.paymentAmount,
+        input.paymentProvider,
       );
 
-      return updatedOrganization;
+      return prismaTransaction.organizationOrder.findUnique({
+        where: { id: order.id },
+        include: { details: true, statusHistory: true },
+      });
     });
+  }
+
+  private async completeCurrencyPurchase(
+    tx: Prisma.TransactionClient,
+    order: { id: string; organizationId: string },
+    currencyCode: string,
+    amount: number,
+    paymentReference: string,
+    paymentAmount: number,
+    paymentProvider?: string,
+  ) {
+    await tx.organizationOrder.update({
+      where: { id: order.id },
+      data: {
+        orderStatus: OrganizationOrderStatus.COMPLETED,
+        paymentReference,
+        paymentAmount,
+        paymentProvider,
+        paymentConfirmedAt: new Date(),
+        statusHistory: {
+          create: {
+            status: OrganizationOrderStatus.COMPLETED,
+            timestamp: new Date(),
+          },
+        },
+      },
+    });
+
+    await tx.currencyBucket.update({
+      where: {
+        organization_id_currency_code: {
+          organizationId: order.organizationId,
+          code: currencyCode,
+        },
+      },
+      data: { availableAmount: { increment: amount } },
+    });
+
+    const metaFlags = await tx.metaFlagsForOrganization.findUnique({
+      where: { organizationId: order.organizationId },
+      select: { firstCurrencyBalanceAdded: true },
+    });
+
+    if (!metaFlags?.firstCurrencyBalanceAdded) {
+      await tx.metaFlagsForOrganization.update({
+        where: { organizationId: order.organizationId },
+        data: { firstCurrencyBalanceAdded: true },
+      });
+    }
+
+    return tx.organizationOrder.findUnique({
+      where: { id: order.id },
+      include: { details: true, statusHistory: true },
+    });
+  }
+
+  private async getPurchaseCurrency(
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+    currencyCode: string,
+  ) {
+    const currency = await tx.currency.findFirst({
+      where: { organizationId, code: currencyCode },
+      include: {
+        exchangeRates: {
+          orderBy: { updatedAt: 'desc' },
+          take: 1,
+        },
+      },
+    });
+
+    if (!currency) {
+      throw new CommonException(
+        `Currency ${currencyCode} not found for organization`,
+        StatusCodes.NOT_FOUND,
+      );
+    }
+
+    const rate = Number(currency.exchangeRates[0]?.rate ?? 1);
+    if (!Number.isFinite(rate) || rate <= 0) {
+      throw new CommonException(
+        'Currency has no valid exchange rate',
+        StatusCodes.BAD_REQUEST,
+      );
+    }
+
+    return { currency, rate };
+  }
+
+  private assertPaymentAmount(expected: number, paid: number) {
+    if (!Number.isFinite(paid) || paid <= 0) {
+      throw new CommonException(
+        'A positive paymentAmount is required',
+        StatusCodes.BAD_REQUEST,
+      );
+    }
+
+    if (Math.abs(expected - paid) > 0.01) {
+      throw new CommonException(
+        `Payment amount ${paid} does not match the expected amount ${expected.toFixed(
+          2,
+        )}`,
+        StatusCodes.BAD_REQUEST,
+      );
+    }
   }
 
   async updateOrganizationCurrencyBucketProperties(

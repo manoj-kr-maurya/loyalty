@@ -315,7 +315,11 @@ export class LoyaltyEngineService {
         } else {
           const wallet = await tx.customerWallet.findUnique({
             where: {
-              customer_id_currency_code: { customerId, currencyCode },
+              customer_id_organization_currency_code: {
+                customerId,
+                organizationId,
+                currencyCode,
+              },
             },
           });
           walletBalance = wallet?.availableBalance ?? 0;
@@ -529,7 +533,12 @@ export class LoyaltyEngineService {
     }
 
     const currency = await this.prisma.currency.findUnique({
-      where: { code: currencyCode },
+      where: {
+        organization_id_currency_code_currency: {
+          organizationId,
+          code: currencyCode,
+        },
+      },
       select: { organizationId: true },
     });
 
@@ -542,6 +551,7 @@ export class LoyaltyEngineService {
 
     const wallets = await this.prisma.customerWallet.findMany({
       where: {
+        organizationId,
         currencyCode,
         availableBalance: { gt: 0 },
       },
@@ -615,7 +625,12 @@ export class LoyaltyEngineService {
 
     const currency = input.currencyCode
       ? await this.prisma.currency.findUnique({
-          where: { code: input.currencyCode },
+          where: {
+            organization_id_currency_code_currency: {
+              organizationId,
+              code: input.currencyCode,
+            },
+          },
           select: { code: true, organizationId: true },
         })
       : await this.prisma.currency.findFirst({
@@ -633,70 +648,82 @@ export class LoyaltyEngineService {
 
     const currencyCode = currency.code;
 
-    const [wallet, order, customerTier, opening, period, earned, burned, expired] =
-      await Promise.all([
-        this.prisma.customerWallet.findUnique({
-          where: {
-            customer_id_currency_code: { customerId, currencyCode },
-          },
-        }),
-        this.prisma.customerOrganizationOrder.findFirst({
-          where: { customerId, organizationId },
-          select: { id: true },
-        }),
-        this.prisma.customerTier.findUnique({
-          where: { customerId_organizationId: { customerId, organizationId } },
-          include: { tier: true },
-        }),
-        this.prisma.loyaltyLedgerEntry.aggregate({
-          where: {
+    const [
+      wallet,
+      order,
+      customerTier,
+      opening,
+      period,
+      earned,
+      burned,
+      expired,
+    ] = await Promise.all([
+      this.prisma.customerWallet.findUnique({
+        where: {
+          customer_id_organization_currency_code: {
             customerId,
             organizationId,
             currencyCode,
-            createdAt: { lt: periodStart },
           },
-          _sum: { points: true },
-        }),
-        this.prisma.loyaltyLedgerEntry.aggregate({
-          where: {
-            customerId,
-            organizationId,
-            currencyCode,
-            createdAt: { gte: periodStart, lte: periodEnd },
-          },
-          _sum: { points: true },
-        }),
-        this.prisma.loyaltyLedgerEntry.aggregate({
-          where: {
-            customerId,
-            organizationId,
-            currencyCode,
-            type: LoyaltyLedgerType.EARN,
-            createdAt: { gte: periodStart, lte: periodEnd },
-          },
-          _sum: { points: true },
-        }),
-        this.prisma.loyaltyLedgerEntry.aggregate({
-          where: {
-            customerId,
-            organizationId,
-            currencyCode,
-            type: LoyaltyLedgerType.BURN,
-            createdAt: { gte: periodStart, lte: periodEnd },
-          },
-          _sum: { points: true },
-        }),
-        this.prisma.loyaltyLedgerEntry.aggregate({
-          where: {
-            customerId,
-            organizationId,
-            currencyCode,
-            type: LoyaltyLedgerType.EXPIRE,
-            createdAt: { gte: periodStart, lte: periodEnd },
-          },
-          _sum: { points: true },
-        }),
-      ]);
+        },
+      }),
+      this.prisma.customerOrganizationOrder.findFirst({
+        where: { customerId, organizationId },
+        select: { id: true },
+      }),
+      this.prisma.customerTier.findUnique({
+        where: { customerId_organizationId: { customerId, organizationId } },
+        include: { tier: true },
+      }),
+      this.prisma.loyaltyLedgerEntry.aggregate({
+        where: {
+          customerId,
+          organizationId,
+          currencyCode,
+          createdAt: { lt: periodStart },
+        },
+        _sum: { points: true },
+      }),
+      this.prisma.loyaltyLedgerEntry.aggregate({
+        where: {
+          customerId,
+          organizationId,
+          currencyCode,
+          createdAt: { gte: periodStart, lte: periodEnd },
+        },
+        _sum: { points: true },
+      }),
+      this.prisma.loyaltyLedgerEntry.aggregate({
+        where: {
+          customerId,
+          organizationId,
+          currencyCode,
+          type: LoyaltyLedgerType.EARN,
+          createdAt: { gte: periodStart, lte: periodEnd },
+        },
+        _sum: { points: true },
+      }),
+      this.prisma.loyaltyLedgerEntry.aggregate({
+        where: {
+          customerId,
+          organizationId,
+          currencyCode,
+          type: LoyaltyLedgerType.BURN,
+          createdAt: { gte: periodStart, lte: periodEnd },
+        },
+        _sum: { points: true },
+      }),
+      this.prisma.loyaltyLedgerEntry.aggregate({
+        where: {
+          customerId,
+          organizationId,
+          currencyCode,
+          type: LoyaltyLedgerType.EXPIRE,
+          createdAt: { gte: periodStart, lte: periodEnd },
+        },
+        _sum: { points: true },
+      }),
+    ]);
 
     if (!wallet && !order) {
       throw new CommonException(

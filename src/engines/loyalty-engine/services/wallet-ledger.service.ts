@@ -56,18 +56,25 @@ export class WalletLedgerService {
       params.organizationId,
       params.currencyCode,
     );
-    await this.reserveBucketFunds(tx, params.organizationId, params.currencyCode, points);
+    await this.reserveBucketFunds(
+      tx,
+      params.organizationId,
+      params.currencyCode,
+      points,
+    );
 
     const wallet = await tx.customerWallet.upsert({
       where: {
-        customer_id_currency_code: {
+        customer_id_organization_currency_code: {
           customerId: params.customerId,
+          organizationId: params.organizationId,
           currencyCode: params.currencyCode,
         },
       },
       update: { availableBalance: { increment: points } },
       create: {
         customerId: params.customerId,
+        organizationId: params.organizationId,
         currencyCode: params.currencyCode,
         availableBalance: points,
       },
@@ -120,8 +127,9 @@ export class WalletLedgerService {
 
     const wallet = await tx.customerWallet.findUnique({
       where: {
-        customer_id_currency_code: {
+        customer_id_organization_currency_code: {
           customerId: params.customerId,
+          organizationId: params.organizationId,
           currencyCode: params.currencyCode,
         },
       },
@@ -191,12 +199,23 @@ export class WalletLedgerService {
       );
     }
 
-    const updatedWallet = await tx.customerWallet.update({
-      where: { id: wallet.id },
+    const walletUpdate = await tx.customerWallet.updateMany({
+      where: { id: wallet.id, availableBalance: { gte: points } },
       data: {
         availableBalance: { decrement: points },
         usedBalance: { increment: points },
       },
+    });
+
+    if (walletUpdate.count === 0) {
+      throw new CommonException(
+        'Wallet balance changed concurrently. Please retry.',
+        StatusCodes.CONFLICT,
+      );
+    }
+
+    const updatedWallet = await tx.customerWallet.findUniqueOrThrow({
+      where: { id: wallet.id },
     });
 
     return this.appendLedger(tx, {
@@ -278,8 +297,9 @@ export class WalletLedgerService {
   ): Promise<{ expiredPoints: number }> {
     const wallet = await tx.customerWallet.findUnique({
       where: {
-        customer_id_currency_code: {
+        customer_id_organization_currency_code: {
           customerId: params.customerId,
+          organizationId: params.organizationId,
           currencyCode: params.currencyCode,
         },
       },
@@ -355,7 +375,12 @@ export class WalletLedgerService {
     currencyCode: string,
   ): Promise<void> {
     const currency = await tx.currency.findUnique({
-      where: { code: currencyCode },
+      where: {
+        organization_id_currency_code_currency: {
+          organizationId,
+          code: currencyCode,
+        },
+      },
       select: { organizationId: true },
     });
 
@@ -417,14 +442,13 @@ export class WalletLedgerService {
   }
 
   private normalizePoints(points: number): number {
-    const normalized = Math.trunc(points);
-    if (!Number.isFinite(normalized) || normalized <= 0) {
+    if (!Number.isInteger(points) || points <= 0) {
       throw new CommonException(
         'Points must be a positive integer',
         StatusCodes.BAD_REQUEST,
       );
     }
-    return normalized;
+    return points;
   }
 
   private resolveTransactionRef(params: {
