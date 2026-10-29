@@ -196,12 +196,14 @@ export class CustomerService {
   async someFunctionThatMyGetCustomerEndPointWillCall(
     id: string,
     balances: boolean,
+    organizationId: string,
   ): Promise<{ customer: Customer; customerWallets: any } | Customer> {
     if (balances) {
       const { customerWallet: customerWallets, ...customer } =
-        await this.customerPrismaHelperService.findCustomerWithWalletBalances({
-          id,
-        });
+        await this.customerPrismaHelperService.findCustomerWithWalletBalances(
+          { id },
+          organizationId,
+        );
       return { customer, customerWallets };
     }
     return await this.getCustomerById(id);
@@ -242,6 +244,7 @@ export class CustomerService {
     return this.someFunctionThatMyGetCustomerEndPointWillCall(
       customerId,
       balances,
+      organizationId,
     );
   }
 

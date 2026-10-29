@@ -65,6 +65,7 @@ export class CustomerPrismaHelperService {
       const wallet = await this.prismaService.customerWallet.findFirst({
         where: {
           customerId,
+          organizationId,
           currencyCode: { in: currencies.map((currency) => currency.code) },
         },
         select: { id: true },
@@ -93,11 +94,21 @@ export class CustomerPrismaHelperService {
     });
   }
 
-  async findCustomerWithWalletBalances(where: Prisma.CustomerWhereUniqueInput) {
+  /**
+   * Loads a customer together with their wallet balances.
+   * The wallet relation is scoped to a single organization so a tenant can
+   * never observe the balances it holds for a customer at another tenant.
+   */
+  async findCustomerWithWalletBalances(
+    where: Prisma.CustomerWhereUniqueInput,
+    organizationId: string,
+  ) {
     return await this.prismaService.customer.findFirstOrThrow({
       where,
       include: {
-        customerWallet: true,
+        customerWallet: {
+          where: { organizationId },
+        },
       },
     });
   }
