@@ -1233,8 +1233,9 @@ ENVIRONMENT=dev|stage|prod
 - Factor2 SMS gateway (test/live modes)
 
 ### Database Migrations
-- Location: `prisma/migrations/0_init/`
-- Prisma CLI for schema updates
+- Location: `prisma/migrations/0_init_full/` (squashed full-schema baseline)
+- Legacy incremental migrations archived in `prisma/migrations_legacy/` (reference only)
+- Prisma CLI for schema updates (`prisma migrate dev` / `prisma migrate deploy`)
 - PostgreSQL with UUID generation
 
 ---

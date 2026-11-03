@@ -24,7 +24,7 @@
     "docker:build": "docker compose up -d --build",
     "migrate-deploy": "npx prisma migrate deploy",
     "migrate-dev": "npx prisma migrate dev --name init",
-    "resolve-migrations": "npx prisma migrate resolve --applied 0_init"
+    "resolve-migrations": "npx prisma migrate resolve --applied 0_init_full"
   },
   "dependencies": {
     "@nestjs-modules/mailer": "^1.9.1",

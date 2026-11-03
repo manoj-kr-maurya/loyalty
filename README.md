@@ -121,6 +121,9 @@ CUSTOMER_OTP_ENABLED=false
    docker-compose up -d
    ```
 
+The application container runs `npx prisma migrate deploy` on startup (see the
+`Dockerfile` `CMD`), so migrations are applied before the app boots.
+
 ### Running Locally Without Docker
 
 1. Clone the repository
@@ -136,6 +139,43 @@ CUSTOMER_OTP_ENABLED=false
    ```bash
    npm run start:dev
    ```
+
+### Database Migrations
+
+Migrations live in `prisma/migrations/`. The current history is a single
+squashed baseline, `0_init_full`, that creates the entire public schema (every
+model in `prisma/schema.prisma`). The previous incremental chain was incomplete
+(it never created 20 of the tables), so it is archived under
+`prisma/migrations_legacy/` for reference only - Prisma does not read it.
+
+- **Fresh database** - nothing to do; the baseline is applied automatically:
+  ```bash
+  npx prisma migrate deploy   # applies 0_init_full
+  ```
+- **Database that already has this schema** (e.g. one previously synced with
+  `prisma db push`) - baseline it once instead of running the baseline SQL:
+  ```bash
+  # clear history left behind by the old incremental migrations
+  psql "$LSB_PG_URL" -c 'DELETE FROM _prisma_migrations;'
+  npx prisma migrate resolve --applied 0_init_full
+  npx prisma migrate status   # -> "Database schema is up to date"
+  ```
+- **Adding migrations** - always use `prisma migrate dev`, never `prisma db push`,
+  so the history stays authoritative:
+  ```bash
+  npx prisma migrate dev --name <change>
+  ```
+
+Do not mix `prisma db push` and `prisma migrate deploy` against the same
+environment - pick migrations (recommended) and stick to it.
+
+Verify migrations still match the schema (useful in CI):
+```bash
+npx prisma migrate diff \
+  --from-migrations prisma/migrations \
+  --to-schema-datamodel prisma/schema.prisma \
+  --shadow-database-url "$SHADOW_DATABASE_URL" --exit-code
+```
 
 ## Containerization Details
 
