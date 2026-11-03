@@ -2,7 +2,6 @@ import { envEnums, Environments } from './enums';
 
 export interface DBVariables {
   [envEnums.LSB_PG_URL]: string;
-  [envEnums.AGENDA_MONGO_DB_URI]: string;
 }
 
 export interface ServerSettingsEnvVariables {
@@ -28,6 +27,7 @@ export interface MailerVariables {
 
 export interface OTPVariables {
   [envEnums.OTP_TIME_OUT_MINUTES]: number;
+  [envEnums.CUSTOMER_OTP_ENABLED]: boolean;
 }
 
 export interface ExternalServiceBaseUrlsVariables {

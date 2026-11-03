@@ -14,7 +14,6 @@ The following services are monitored:
 
 - **PostgreSQL** (via Prisma)
 - **Redis**
-- **MongoDB** (placeholder implementation provided)
 
 ## Integration
 
@@ -27,15 +26,6 @@ To add more health indicators:
 1. Create a new health indicator in the `indicators` directory
 2. Add it to the providers in `health-check.module.ts`
 3. Add it to the health check in `health-check.controller.ts`
-
-## MongoDB Support
-
-MongoDB support is included as a placeholder but not active. To fully implement MongoDB health checks:
-
-1. Create a proper MongoDB service that exposes connection status
-2. Inject that service into the MongoHealthIndicator
-3. Add the MongoHealthIndicator to HealthCheckModule providers
-4. Add it to the controller health check methods
 
 ## Usage in Kubernetes
 
@@ -56,3 +46,13 @@ readinessProbe:
   initialDelaySeconds: 5
   periodSeconds: 10
 ```
+
+## 🎓 Learning Requirement
+
+When fixing, implementing, or changing anything, the AI assistant MUST include three sections:
+1. **Concept** — the underlying idea/principle.
+2. **Implementation Principle / Pattern applied** — name the SOLID principle, GoF design pattern, or architecture pattern used, and where in the code (file:line).
+3. **Resource** — official docs/article for learning.
+
+Every change is a learning opportunity; never change silently.
+

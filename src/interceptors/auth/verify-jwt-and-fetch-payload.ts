@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import to from 'await-to-js';
 import { Observable } from 'rxjs';
-import { AuthService } from 'src/modules/domain/auth/auth.service';
+import { AuthService } from 'src/modules/auth/auth.service';
 
 @Injectable()
 export class VerifyJWTAndFetchPayload implements NestInterceptor {

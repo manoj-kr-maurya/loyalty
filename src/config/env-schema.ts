@@ -106,6 +106,13 @@ class CustomJOI {
           value: null,
         };
       }
+
+      // Persist the coerced value. Without this, ConfigService would return the
+      // raw string from .env/process.env (e.g. the truthy "false" for a boolean
+      // or "3003" for a number) even though the declared type says otherwise.
+      if (value !== undefined) {
+        (config as Record<string, unknown>)[key] = value;
+      }
     }
 
     return { error: null, value: config };
@@ -124,8 +131,6 @@ const validator = new CustomJOI();
 // Define the LSB_PG_URL as a required string
 validator.string(envEnums.LSB_PG_URL).required();
 
-// Define the AGENDA_MONGO_DB_URI as a required string
-validator.string(envEnums.AGENDA_MONGO_DB_URI).required();
 // Define the PORT as a required number with a default value of 3003
 validator.number(envEnums.PORT).default(3003).required();
 
@@ -149,10 +154,7 @@ validator.string(envEnums.REDIS_HOST).default('localhost');
 validator.number(envEnums.REDIS_PORT).default(6379).required();
 
 // Define whether the Redis connection requires TLS (e.g. Upstash)
-validator
-  .boolean(envEnums.REDIS_TLS)
-  .default(false)
-  .required();
+validator.boolean(envEnums.REDIS_TLS).default(false).required();
 
 // Define the SENDER_MAIL as a required string
 validator.string(envEnums.SENDER_MAIL).required();
@@ -162,6 +164,10 @@ validator.string(envEnums.SENDER_PASSWORD).required();
 
 // Define the OTP_TIME_OUT_MINUTES as a required number with a default value of 10
 validator.number(envEnums.OTP_TIME_OUT_MINUTES).default(10).required();
+
+// Shopper OTP authentication is off by default: a tenant authenticates its own
+// shoppers and exchanges that assertion for a customer session token.
+validator.boolean(envEnums.CUSTOMER_OTP_ENABLED).default(false).required();
 
 // Define the PHONEPE_BASE_URL as a required string
 validator.string(envEnums.PHONEPE_BASE_URL).required();

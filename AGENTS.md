@@ -29,7 +29,7 @@
 | **Database** | PostgreSQL | Primary data store |
 | **ORM** | Prisma 5.4 | Database abstraction |
 | **Caching** | Redis | Session, cache management |
-| **Job Queue** | Agenda + MongoDB | Async job scheduling |
+| **Job Queue** | pg-boss on PostgreSQL | Async job scheduling |
 | **Message Queue** | RabbitMQ | Event-driven architecture |
 | **Auth** | JWT + OTP | Authentication |
 | **Email** | Nodemailer | Email delivery |
@@ -56,10 +56,10 @@
                 │
     ┌───────────┼───────────┐
     │           │           │
-┌───▼───┐  ┌───▼───┐  ┌───▼───┐
-│Postgres│  │ Redis │  │MongoDB │
-│Primary │  │Cache  │  │ Jobs   │
-└────────┘  └───────┘  └────────┘
+┌───▼───┐  ┌───▼───┐
+│Postgres│  │ Redis │
+│Primary │  │Cache  │
+└────────┘  └───────┘
     │
 ┌───▼────────────────┐
 │ Backup / Standby   │ (HA Setup)
@@ -449,10 +449,10 @@ Shop:
 
 ## 🔌 Core Modules (src/modules/core/)
 
-### **Agenda** (`core/agenda/`)
-**Purpose**: Async job scheduling and processing
+### **JobScheduler** (`modules/jobs/`)
+**Purpose**: Async job scheduling and processing via pg-boss (PostgreSQL-backed)
 
-- **Technology**: Agenda + MongoDB
+- **Technology**: pg-boss on PostgreSQL (`pgboss` schema in the primary DB)
 - **Use Cases**:
   - Campaign expiry reminders
   - Wallet point auto-expiry
@@ -470,7 +470,6 @@ Shop:
 - **Checks**:
   - PostgreSQL connectivity
   - Redis connectivity
-  - MongoDB connectivity
   - Memory usage
   - Disk space
 - **Endpoints**:
@@ -612,7 +611,7 @@ Invite (team invitations)
    ├─ Campaigns are ACTIVE
 
 3. Campaign Expiry
-   ├─ Agenda job triggers before end date
+   ├─ Scheduled job triggers before end date
    ├─ Send expiry reminder to organization
    ├─ Auto-disable campaign
    └─ Remaining currency returned to bucket
@@ -702,13 +701,13 @@ Redis:
   └─ Temporary: OTP codes with 10-min TTL
 ```
 
-### Job Queue (MongoDB)
+### Job Queue (PostgreSQL / pg-boss)
 ```
-MongoDB:
+pgboss.job (partitioned by queue name):
   ├─ Job persistence
-  ├─ Retry tracking
-  ├─ Status history
-  └─ Lock mechanism
+  ├─ Retry tracking (retry_limit/retry_count/retry_backoff)
+  ├─ Status history (state + created/started/completed timestamps)
+  └─ Lock / heartbeat mechanism (expire_seconds, heartbeat_seconds)
 ```
 
 ---
@@ -784,7 +783,7 @@ POST   /wallets/:customerId/:currency/debit           - Spend
    - Review service methods in order
    - Check dependencies between services
    - Look for Prisma queries to understand data flow
-   - Trace job queue usage (Agenda)
+   - Trace job queue usage (JobScheduler/pg-boss)
 
 4. **Database Understanding**:
    - Check `prisma/schema.prisma` for models
@@ -956,7 +955,7 @@ src/
   │  │  ├─ organization-order/
   │  │  └─ shop/
   │  ├─ core/                   # Infrastructure
-  │  │  ├─ agenda/              # Job scheduling
+  │  │  ├─ jobs/                # Job scheduling (pg-boss)
   │  │  ├─ http/                # HTTP client
   │  │  ├─ listener/            # Events/webhooks
   │  │  └─ (more services)
@@ -1013,3 +1012,43 @@ src/
 **Last Updated**: January 2024  
 **Maintained by**: Development Team  
 **Next Review**: Q2 2024
+
+## 🎓 Learning Requirement for AI Assistants
+
+When you (the AI assistant) are **fixing, implementing, or changing anything** in this project, you **MUST** include the following sections in your explanation:
+
+1. **Concept** — the underlying programming/architecture idea behind the change (e.g. dependency injection, pipe scope, request lifecycle, Joi validation, route matching, DB transactions, etc.).
+
+2. **Implementation Principle / Pattern applied** — the concrete design principle or GoF/architecture pattern that the code follows. Examples:
+   - **SOLID**: Single Responsibility, Open/Closed, Dependency Inversion, etc.
+   - **Creational**: Factory, Builder, Singleton
+   - **Structural**: Adapter, Facade, Decorator, Proxy
+   - **Behavioral**: Strategy, Template Method, Chain of Responsibility, Observer
+   - **Architectural**: Layered architecture, Dependency Injection, BFF, Repository, Service Layer, DTO, Pipe/Interceptor pattern (NestJS-specific)
+   
+   Name the principle/pattern explicitly and point to where in the code it is applied (file:line).
+
+3. **Resource(s)** — official docs, articles, or references so the team can learn more.
+
+The purpose is that **every change is a learning opportunity**. Never make a change silently. Always link the fix/feature to a concept, an applied implementation principle/pattern, and a resource.
+
+### ✅ Example of a good explanation
+
+```
+## Concept
+Dependency Injection (DI): passing dependencies via constructor instead of hardcoding them
+makes the service testable and decoupled.
+
+## Implementation Principle applied
+Dependency Inversion Principle (SOLID D) + NestJS DI container.
+- PromoService declares CouponValidatorService in its constructor (promo.service.ts:61)
+  instead of instantiating it, so the validator can be swapped/mocked.
+- Strategy Pattern: CouponValidatorService stores a list of ValidationRule objects
+  and iterates them, letting each rule (status, expiry, cart limit) be added/removed
+  independently without changing the core loop (coupon-validator.service.ts:124).
+
+## Resources
+- https://docs.nestjs.com/providers  (NestJS DI)
+- https://refactoring.guru/design-patterns/strategy  (Strategy pattern)
+```
+

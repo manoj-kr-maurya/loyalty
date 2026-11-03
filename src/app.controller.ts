@@ -6,8 +6,8 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { EnvironmentVariables } from './config/types';
-import { envEnums } from './config/enums';
+import { EnvironmentVariables } from 'src/config/types';
+import { envEnums } from 'src/config/enums';
 
 @Controller('')
 export class AppController {

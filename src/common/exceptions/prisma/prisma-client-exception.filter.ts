@@ -106,10 +106,11 @@ export class PrismaClientExceptionFilter implements ExceptionFilter {
     // Extract error details from the custom exception
     const { response: errorResponse } = customException;
 
-    response.status(errorResponse.statusCode || 500).json({
+    // Never echo Prisma's raw message (table/column names, SQL fragments,
+    // parameter values) to clients. It is already logged above.
+    response.status(customException.getStatus()).json({
       error: errorResponse.error,
       errorCode: errorResponse.errorCode,
-      detail: errorResponse.detail,
     });
   }
 }

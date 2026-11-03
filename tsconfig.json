@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "baseUrl": "./", // setting a value for baseUrl is required
+    "baseUrl": "./",
     "moduleResolution": "node",
     "module": "CommonJS",
     "declaration": true,
@@ -18,6 +18,9 @@
     "strictBindCallApply": false,
     "forceConsistentCasingInFileNames": false,
     "noFallthroughCasesInSwitch": false,
-    "esModuleInterop": true
+    "esModuleInterop": true,
+    "paths": {
+      "src/*": ["src/*"]
+    }
   }
 }

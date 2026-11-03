@@ -132,3 +132,13 @@ export class YourService {
    - Relatively stable (doesn't change too often)
 4. **Proper Invalidation**: Always invalidate related caches when data changes
 5. **Error Handling**: The cache system is designed to fail gracefully, falling back to the original data source if caching fails
+
+## 🎓 Learning Requirement
+
+When fixing, implementing, or changing anything, the AI assistant MUST include three sections:
+1. **Concept** — the underlying idea/principle.
+2. **Implementation Principle / Pattern applied** — name the SOLID principle, GoF design pattern, or architecture pattern used, and where in the code (file:line).
+3. **Resource** — official docs/article for learning.
+
+Every change is a learning opportunity; never change silently.
+

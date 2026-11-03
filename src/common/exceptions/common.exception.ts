@@ -66,11 +66,14 @@ export class SmsTemplateNotFoundException extends UnprocessableEntityException {
   }
 }
 
-export class TooManyAttemptsException extends UnauthorizedException {
+export class TooManyAttemptsException extends HttpException {
   constructor() {
-    super({
-      error: `Too many attempts. Please try again later.`,
-      errorCode: CommonResponseCodes.Too_Many_Attempts,
-    });
+    super(
+      {
+        error: `Too many attempts. Please try again later.`,
+        errorCode: CommonResponseCodes.Too_Many_Attempts,
+      },
+      HttpStatus.TOO_MANY_REQUESTS,
+    );
   }
 }

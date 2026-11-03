@@ -20,6 +20,8 @@ model Organization {
 
   phoneNumber        String                      @unique()
   countryCode        String
+  username           String?                     @unique
+  passwordHash       String?
   isVerified         Boolean                     @default(false)
   kycStatus          Boolean                     @default(false)
   token              String                      @default("")
@@ -43,6 +45,8 @@ model Organization {
   campaigns          OrganizationCampaign[]
   customerOrgOrders  CustomerOrganizationOrder[]
   rewardPrograms     RewardProgram[]
+  apiKeys            OrganizationApiKey[]
+  customers          Customer[]
 
   @@index([phoneNumber])
   @@index([countryCode])
@@ -64,9 +68,12 @@ model MetaFlagsForOrganization {
 model Customer {
   id                String                      @id @default(uuid())
   name              String?
-  phoneNumber       String                      @unique()
+  phoneNumber       String
   countryCode       String
+  externalId        String?
   isVerified        Boolean                     @default(false)
+  organizationId    String
+  organization      Organization                @relation(fields: [organizationId], references: [id])
   metaFlags         MetaFlagsForCustomer?
   token             String                      @default("")
   createdAt         DateTime                    @default(now())
@@ -75,9 +82,13 @@ model Customer {
   logoUrl           String?
   customerOrgOrders CustomerOrganizationOrder[]
   customerWallet    CustomerWallet[]
+  couponCodes       CouponCode[]
   rewardBlocks      RewardBlock[]
   rewardLedgers     RewardLedger[]
 
+  @@unique([organizationId, phoneNumber], name: "organization_id_customer_phone_number")
+  @@unique([organizationId, externalId], name: "organization_id_customer_external_id")
+  @@index([phoneNumber])
   @@map("customer")
 }
 
@@ -88,6 +99,25 @@ model MetaFlagsForCustomer {
   customerId           String   @unique
 
   @@map("metaFlagsForCustomer")
+}
+
+model OrganizationApiKey {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String?
+  prefix         String       @unique
+  keyHash        String       @unique
+  scopes         String[]     @default([])
+  isActive       Boolean      @default(true)
+  lastUsedAt     DateTime?
+  expiresAt      DateTime?
+  revokedAt      DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([organizationId, isActive])
+  @@map("organizationApiKey")
 }
 
 model OrganizationCampaign {
@@ -103,7 +133,7 @@ model OrganizationCampaign {
   updatedAt         DateTime     @updatedAt
   isSoftDeleted     Boolean      @default(false)
 
-  earningExpiresIn         Int          @default(30)
+  earningExpiresIn         Int                       @default(30)
   earningCoinAmountDetails EarningCoinAmountDetail[]
 
   @@unique([organizationId, name], name: "unique_organization_campaign_name")
@@ -114,12 +144,13 @@ model OrganizationCampaign {
 model Currency {
   id             String         @id @default(uuid())
   name           String
-  code           String         @unique
+  code           String
   symbol         String         @default("_")
   exchangeRates  ExchangeRate[]
   organization   Organization   @relation(fields: [organizationId], references: [id])
   organizationId String
 
+  @@unique([organizationId, code], name: "organization_id_currency_code_currency")
   @@map("currency")
 }
 
@@ -170,18 +201,23 @@ model CurrencyBucketTransaction {
 }
 
 model OrganizationOrder {
-  id             String                           @id @default(uuid())
-  organizationId String
-  transactionId  String
-  orderType      OrganizationOrderType
-  orderStatus    OrganizationOrderStatus
-  details        OrderDetails?
-  createdAt      DateTime                         @default(now())
-  updatedAt      DateTime                         @updatedAt
-  amount         Float
-  statusHistory  OrganizationOrderStatusHistory[]
-  organization   Organization                     @relation(fields: [organizationId], references: [id])
+  id                 String                           @id @default(uuid())
+  organizationId     String
+  transactionId      String
+  orderType          OrganizationOrderType
+  orderStatus        OrganizationOrderStatus
+  details            OrderDetails?
+  paymentReference   String?                          @unique
+  paymentAmount      Float?
+  paymentProvider    String?
+  paymentConfirmedAt DateTime?
+  createdAt          DateTime                         @default(now())
+  updatedAt          DateTime                         @updatedAt
+  amount             Float
+  statusHistory      OrganizationOrderStatusHistory[]
+  organization       Organization                     @relation(fields: [organizationId], references: [id])
 
+  @@index([organizationId, orderStatus])
   @@map("organizationOrder")
 }
 
@@ -217,13 +253,15 @@ model CustomerWallet {
   expiredBalance   Int                    @default(0)
   customer         Customer               @relation(fields: [customerId], references: [id])
   customerId       String
+  organizationId   String
   currencyCode     String
   pockets          CustomerWalletPocket[]
   createdAt        DateTime               @default(now())
   updatedAt        DateTime               @updatedAt
 
-  @@unique([customerId, currencyCode], name: "customer_id_currency_code")
+  @@unique([customerId, organizationId, currencyCode], name: "customer_id_organization_currency_code")
   @@index([customerId])
+  @@index([organizationId])
   @@index([currencyCode])
   @@map("customerWallet")
 }
@@ -258,13 +296,14 @@ model CustomerWalletPocketTransaction {
   updatedAt              DateTime                              @updatedAt
   customerWalletPocket   CustomerWalletPocket                  @relation(fields: [customerWalletPocketId], references: [id])
 
+  @@unique([customerWalletPocketId, transactionRef], name: "wallet_pocket_transaction_ref")
   @@index([customerWalletPocketId])
   @@map("customerWalletPocketTransaction")
 }
 
 model RewardProgram {
-  id                 String            @id @default(uuid())
-  organization       Organization      @relation(fields: [organizationId], references: [id])
+  id                 String              @id @default(uuid())
+  organization       Organization        @relation(fields: [organizationId], references: [id])
   organizationId     String
   name               String
   description        String?
@@ -272,106 +311,148 @@ model RewardProgram {
   rewardType         RewardType
   status             RewardProgramStatus @default(ACTIVE)
   rewardCurrency     String
-  budgetEnabled      Boolean           @default(false)
-  expiryNotification Boolean           @default(false)
-  priority           Int               @default(0)
+  budgetEnabled      Boolean             @default(false)
+  expiryNotification Boolean             @default(false)
+  priority           Int                 @default(0)
   business           String?
   category           String?
-  startDate          DateTime          @default(now())
-  endDate            DateTime          @default(now())
-  timezone           String?           @default("UTC")
+  couponCode         String?
+  couponValue        Decimal?            @db.Decimal(12, 2)
+  subTitle           String?
+  minBankAmount      Decimal?            @db.Decimal(12, 2)
+  minimumCartValue   Decimal?            @db.Decimal(12, 2)
+  maxDiscountValue   Decimal?            @db.Decimal(12, 2)
+  discountType       String?
+  isStackable        Boolean             @default(false)
+  applicableProducts Json?
+  businessType       Json?
+  maxClaimsPerUser   Int?
+  maxClaimsTotal     Int?
+  attributes         Json?
+  channels           Channel[]
+  startDate          DateTime            @default(now())
+  endDate            DateTime            @default(now())
+  timezone           String?             @default("UTC")
   blackoutDates      Json?
   workingDays        Json?
   dailyTimeSlots     Json?
-  version            Int               @default(1)
-  isArchived         Boolean           @default(false)
+  version            Int                 @default(1)
+  isArchived         Boolean             @default(false)
   rules              RewardProgramRule[]
+  couponCodes        CouponCode[]
   rewardBlocks       RewardBlock[]
   rewardLedgers      RewardLedger[]
   budgets            Budget[]
-  createdAt          DateTime          @default(now())
-  updatedAt          DateTime          @updatedAt
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
 
   @@map("rewardProgram")
 }
 
 model RewardProgramRule {
-  id              String           @id @default(uuid())
-  program         RewardProgram    @relation(fields: [programId], references: [id])
-  programId       String
-  name            String
-  conditions      Json
-  rewardType      RewardType
-  rewardMode      RewardMode
-  value           Decimal
-  ratioBase       Decimal?
-  threshold       Decimal?
-  meta            Json?
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
+  id         String        @id @default(uuid())
+  program    RewardProgram @relation(fields: [programId], references: [id])
+  programId  String
+  name       String
+  conditions Json
+  rewardType RewardType
+  rewardMode RewardMode
+  value      Decimal
+  ratioBase  Decimal?
+  threshold  Decimal?
+  meta       Json?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
 
   @@map("rewardProgramRule")
 }
 
+model CouponCode {
+  id             String           @id @default(uuid())
+  code           String           @unique
+  program        RewardProgram    @relation(fields: [programId], references: [id])
+  programId      String
+  customer       Customer?        @relation(fields: [customerId], references: [id])
+  customerId     String?
+  isUserSpecific Boolean          @default(true)
+  status         CouponCodeStatus @default(AVAILABLE)
+  usedCount      Int              @default(0)
+  maxUses        Int?             @default(1)
+  perUserLimit   Int?
+  allocatedAt    DateTime         @default(now())
+  expiresAt      DateTime?
+  rewardLedgers  RewardLedger[]
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@index([code])
+  @@index([programId, customerId])
+  @@map("couponCode")
+}
+
 model RewardBlock {
-  id            String           @id @default(uuid())
-  blockId       String           @unique
-  program       RewardProgram    @relation(fields: [programId], references: [id])
-  programId     String
-  customer      Customer         @relation(fields: [customerId], references: [id])
-  customerId    String
-  awardDetails  Json
-  status        RewardBlockStatus @default(PENDING)
-  expiresAt     DateTime?
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
+  id           String            @id @default(uuid())
+  blockId      String            @unique
+  program      RewardProgram     @relation(fields: [programId], references: [id])
+  programId    String
+  customer     Customer          @relation(fields: [customerId], references: [id])
+  customerId   String
+  awardDetails Json
+  status       RewardBlockStatus @default(PENDING)
+  expiresAt    DateTime?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
 
   @@map("rewardBlock")
 }
 
 model RewardLedger {
-  id              String             @id @default(uuid())
-  customer        Customer           @relation(fields: [customerId], references: [id])
-  customerId      String
-  program         RewardProgram      @relation(fields: [programId], references: [id])
-  programId       String
-  rewardType      RewardType
-  amount          Decimal
-  details         Json?
-  transactionRef  String?
-  status          RewardLedgerStatus @default(CREDITED)
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
+  id             String             @id @default(uuid())
+  customer       Customer           @relation(fields: [customerId], references: [id])
+  customerId     String
+  program        RewardProgram      @relation(fields: [programId], references: [id])
+  programId      String
+  couponCode     CouponCode?        @relation(fields: [couponCodeId], references: [id], onDelete: SetNull)
+  couponCodeId   String?
+  rewardType     RewardType
+  amount         Decimal
+  details        Json?
+  transactionRef String?
+  idempotencyKey String?            @unique
+  status         RewardLedgerStatus @default(CREDITED)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
 
+  @@index([couponCodeId])
   @@map("rewardLedger")
 }
 
 model Budget {
-  id            String   @id @default(uuid())
-  program       RewardProgram @relation(fields: [programId], references: [id])
-  programId     String
-  totalBudget   Decimal  @default(0)
-  usedBudget    Decimal  @default(0)
-  reservedBudget Decimal @default(0)
-  currency      String   @default("INR")
-  isActive      Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id             String        @id @default(uuid())
+  program        RewardProgram @relation(fields: [programId], references: [id])
+  programId      String
+  totalBudget    Decimal       @default(0)
+  usedBudget     Decimal       @default(0)
+  reservedBudget Decimal       @default(0)
+  currency       String        @default("INR")
+  isActive       Boolean       @default(true)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
   @@unique([programId])
   @@map("budget")
 }
 
 model AuditLog {
-  id            String   @id @default(uuid())
-  entityType    String
-  entityId      String?
-  action        String
-  actor         String?
-  details       Json?
-  ipAddress     String?
-  userAgent     String?
-  createdAt     DateTime @default(now())
+  id         String   @id @default(uuid())
+  entityType String
+  entityId   String?
+  action     String
+  actor      String?
+  details    Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
 
   @@index([entityType, entityId])
   @@index([action])
@@ -384,6 +465,13 @@ enum RewardProgramType {
   LOYALTY
 }
 
+enum Channel {
+  APP
+  WEB
+  MWEB
+  ALL
+}
+
 enum RewardType {
   COUPON
   DISCOUNT
@@ -394,6 +482,8 @@ enum RewardType {
   BADGE
   COINS
   CASHBACK_WALLET
+  PERCENTAGE
+  BUNDLE
 }
 
 enum RewardMode {
@@ -418,6 +508,14 @@ enum RewardBlockStatus {
   EXPIRED
 }
 
+enum CouponCodeStatus {
+  AVAILABLE
+  BLOCKED
+  CLAIMED
+  EXPIRED
+  REVOKED
+}
+
 enum RewardLedgerStatus {
   CREDITED
   DEBITED
@@ -432,6 +530,7 @@ model CustomerOrganizationOrder {
   customerBurningAmountDetail CustomerBurningAmountDetail?
   physicalCurrency            String
   status                      CustomerOrganizationOrderStatus
+  idempotencyKey              String?
   createdAt                   DateTime                                 @default(now())
   updatedAt                   DateTime                                 @updatedAt
   customerEarningAmountDetail CustomerEarningAmountDetail?
@@ -439,6 +538,7 @@ model CustomerOrganizationOrder {
   organization                Organization                             @relation(fields: [organizationId], references: [id])
   customer                    Customer                                 @relation(fields: [customerId], references: [id])
 
+  @@unique([customerId, idempotencyKey])
   @@index([customerId])
   @@index([organizationId])
   @@index([status])
@@ -649,34 +749,36 @@ enum OrganizationRoles {
 // ─── FX / Currency Engine ───────────────────────────────
 
 model ExchangeRateHistory {
-  id                   String   @id @default(uuid())
+  id                   String    @id @default(uuid())
   currencyId           String
-  physicalCurrencyCode String   @default("INR")
-  rate                 Decimal  @db.Decimal(10, 6)
-  source               String   @default("MANUAL") // MANUAL | API_PROVIDER | CENTRAL_BANK
-  lockedBy             String?  // userId who locked the rate
+  physicalCurrencyCode String    @default("INR")
+  rate                 Decimal   @db.Decimal(10, 6)
+  source               String    @default("MANUAL") // MANUAL | API_PROVIDER | CENTRAL_BANK
+  lockedBy             String? // userId who locked the rate
   lockedUntil          DateTime?
-  isActive             Boolean  @default(true)
-  createdAt            DateTime @default(now())
+  consumedAt           DateTime?
+  isActive             Boolean   @default(true)
+  createdAt            DateTime  @default(now())
 
   @@index([currencyId, physicalCurrencyCode])
+  @@index([currencyId, physicalCurrencyCode, lockedUntil])
   @@index([createdAt])
   @@map("exchangeRateHistory")
 }
 
 model FxAuditLog {
-  id            String   @id @default(uuid())
-  referenceId   String   // unique FX reference ID
-  fromCurrency  String
-  toCurrency    String
-  fromAmount    Decimal  @db.Decimal(18, 6)
-  toAmount      Decimal  @db.Decimal(18, 6)
-  rate          Decimal  @db.Decimal(10, 6)
-  spread        Decimal  @db.Decimal(10, 6) @default(0)
-  source        String   @default("MANUAL")
-  tenantId      String?
-  lockedRate    Boolean  @default(false)
-  createdAt     DateTime @default(now())
+  id           String   @id @default(uuid())
+  referenceId  String // unique FX reference ID
+  fromCurrency String
+  toCurrency   String
+  fromAmount   Decimal  @db.Decimal(18, 6)
+  toAmount     Decimal  @db.Decimal(18, 6)
+  rate         Decimal  @db.Decimal(10, 6)
+  spread       Decimal  @default(0) @db.Decimal(10, 6)
+  source       String   @default("MANUAL")
+  tenantId     String?
+  lockedRate   Boolean  @default(false)
+  createdAt    DateTime @default(now())
 
   @@index([referenceId])
   @@index([tenantId])
@@ -687,20 +789,20 @@ model FxAuditLog {
 // ─── Loyalty Engine ─────────────────────────────────────
 
 model LoyaltyTier {
-  id              String         @id @default(uuid())
-  organizationId  String
-  name            String         // e.g., Silver, Gold, Platinum
-  level           Int            // 1, 2, 3...
-  minPoints       Int            @default(0) // threshold to reach this tier
-  maxPoints       Int?           // ceiling (null = no ceiling)
-  multiplier      Decimal        @default(1.0) @db.Decimal(5, 2) // earn multiplier
-  benefits        Json?          // tier-specific benefits
-  color           String?        // UI color
-  iconUrl         String?
-  isActive        Boolean        @default(true)
-  customerTiers   CustomerTier[]
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  id             String         @id @default(uuid())
+  organizationId String
+  name           String // e.g., Silver, Gold, Platinum
+  level          Int // 1, 2, 3...
+  minPoints      Int            @default(0) // threshold to reach this tier
+  maxPoints      Int? // ceiling (null = no ceiling)
+  multiplier     Decimal        @default(1.0) @db.Decimal(5, 2) // earn multiplier
+  benefits       Json? // tier-specific benefits
+  color          String? // UI color
+  iconUrl        String?
+  isActive       Boolean        @default(true)
+  customerTiers  CustomerTier[]
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
 
   @@unique([organizationId, name])
   @@index([organizationId])
@@ -708,17 +810,17 @@ model LoyaltyTier {
 }
 
 model CustomerTier {
-  id              String      @id @default(uuid())
-  customerId      String
-  organizationId  String
-  tierId          String
-  tier            LoyaltyTier @relation(fields: [tierId], references: [id])
-  currentPoints   Int         @default(0)
-  lifetimePoints  Int         @default(0)
-  upgradedAt      DateTime?
-  downgradedAt    DateTime?
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
+  id             String      @id @default(uuid())
+  customerId     String
+  organizationId String
+  tierId         String
+  tier           LoyaltyTier @relation(fields: [tierId], references: [id])
+  currentPoints  Int         @default(0)
+  lifetimePoints Int         @default(0)
+  upgradedAt     DateTime?
+  downgradedAt   DateTime?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
 
   @@unique([customerId, organizationId])
   @@index([customerId])
@@ -727,48 +829,161 @@ model CustomerTier {
 }
 
 model LoyaltyStatement {
-  id              String   @id @default(uuid())
-  customerId      String
-  organizationId  String
-  periodStart     DateTime
-  periodEnd       DateTime
-  openingBalance  Int      @default(0)
-  earnedPoints    Int      @default(0)
-  redeemedPoints  Int      @default(0)
-  expiredPoints   Int      @default(0)
-  closingBalance  Int      @default(0)
-  tierAtStart     String?
-  tierAtEnd       String?
-  generatedAt     DateTime @default(now())
+  id             String   @id @default(uuid())
+  customerId     String
+  organizationId String
+  periodStart    DateTime
+  periodEnd      DateTime
+  openingBalance Int      @default(0)
+  earnedPoints   Int      @default(0)
+  redeemedPoints Int      @default(0)
+  expiredPoints  Int      @default(0)
+  closingBalance Int      @default(0)
+  tierAtStart    String?
+  tierAtEnd      String?
+  generatedAt    DateTime @default(now())
 
   @@index([customerId, organizationId])
   @@index([periodEnd])
   @@map("loyaltyStatement")
 }
 
+// ─── Loyalty Ledger & Idempotency ───────────────────────
+
+enum LoyaltyLedgerType {
+  EARN
+  BURN
+  EXPIRE
+  TRANSFER_IN
+  TRANSFER_OUT
+  ADJUSTMENT
+  OPENING
+  REVERSAL
+}
+
+model LoyaltyLedgerEntry {
+  id             String            @id @default(uuid())
+  customerId     String
+  organizationId String
+  currencyCode   String
+  type           LoyaltyLedgerType
+  points         Int
+  balanceAfter   Int
+  referenceType  String?
+  referenceId    String?
+  idempotencyKey String?
+  metadata       Json?
+  createdAt      DateTime          @default(now())
+
+  @@index([customerId, organizationId, createdAt])
+  @@index([customerId, currencyCode, type, createdAt])
+  @@index([referenceType, referenceId])
+  @@map("loyaltyLedgerEntry")
+}
+
+model LoyaltyIdempotency {
+  id             String   @id @default(uuid())
+  key            String
+  operation      String
+  organizationId String
+  customerId     String?
+  requestHash    String
+  status         String
+  response       Json?
+  resourceId     String?
+  createdAt      DateTime @default(now())
+  expiresAt      DateTime
+
+  @@unique([organizationId, operation, key])
+  @@index([expiresAt])
+  @@map("loyaltyIdempotency")
+}
+
+model LoyaltyOutboxEvent {
+  id             String    @id @default(uuid())
+  organizationId String
+  eventType      String
+  aggregateId    String
+  payload        Json
+  createdAt      DateTime  @default(now())
+  publishedAt    DateTime?
+
+  @@index([publishedAt, createdAt])
+  @@map("loyaltyOutboxEvent")
+}
+
+enum LoyaltyWebhookDeliveryStatus {
+  PENDING
+  PROCESSING
+  SUCCESS
+  EXHAUSTED
+}
+
+model LoyaltyWebhookEndpoint {
+  id             String   @id @default(uuid())
+  organizationId String
+  url            String
+  secret         String
+  events         String[] @default([])
+  description    String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  deliveries LoyaltyWebhookDelivery[]
+
+  @@index([organizationId, isActive])
+  @@map("loyaltyWebhookEndpoint")
+}
+
+model LoyaltyWebhookDelivery {
+  id             String                       @id @default(uuid())
+  endpointId     String
+  endpoint       LoyaltyWebhookEndpoint       @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+  outboxEventId  String
+  organizationId String
+  eventType      String
+  payload        Json
+  status         LoyaltyWebhookDeliveryStatus @default(PENDING)
+  attempts       Int                          @default(0)
+  maxAttempts    Int                          @default(6)
+  nextAttemptAt  DateTime                     @default(now())
+  responseStatus Int?
+  responseBody   String?
+  lastError      String?
+  deliveredAt    DateTime?
+  createdAt      DateTime                     @default(now())
+  updatedAt      DateTime                     @updatedAt
+
+  @@unique([endpointId, outboxEventId])
+  @@index([status, nextAttemptAt])
+  @@index([organizationId, createdAt])
+  @@map("loyaltyWebhookDelivery")
+}
+
 // ─── Promo / Discount Engine ────────────────────────────
 
 model PromoCode {
-  id              String   @id @default(uuid())
-  organizationId  String
-  code            String   @unique
-  name            String?
-  description     String?
-  discountType    String   // PERCENTAGE | ABSOLUTE | FREE_SHIPPING | BOGO
-  discountValue   Decimal  @db.Decimal(10, 2)
-  minOrderAmount  Decimal? @db.Decimal(10, 2)
-  maxDiscount     Decimal? @db.Decimal(10, 2)
-  usageLimit      Int?     // total uses allowed
-  perUserLimit    Int?     @default(1)
-  usedCount       Int      @default(0)
-  startDate       DateTime
-  endDate         DateTime
-  isActive        Boolean  @default(true)
-  isStackable     Boolean  @default(false)
+  id                 String            @id @default(uuid())
+  organizationId     String
+  code               String            @unique
+  name               String?
+  description        String?
+  discountType       String // PERCENTAGE | ABSOLUTE | FREE_SHIPPING | BOGO
+  discountValue      Decimal           @db.Decimal(10, 2)
+  minOrderAmount     Decimal?          @db.Decimal(10, 2)
+  maxDiscount        Decimal?          @db.Decimal(10, 2)
+  usageLimit         Int? // total uses allowed
+  perUserLimit       Int?              @default(1)
+  usedCount          Int               @default(0)
+  startDate          DateTime
+  endDate            DateTime
+  isActive           Boolean           @default(true)
+  isStackable        Boolean           @default(false)
   applicableProducts Json? // product/category filters
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  redemptions     PromoRedemption[]
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  redemptions        PromoRedemption[]
 
   @@index([organizationId])
   @@index([code])
@@ -776,15 +991,15 @@ model PromoCode {
 }
 
 model PromoRedemption {
-  id              String   @id @default(uuid())
-  promoCodeId     String
-  promoCode       PromoCode @relation(fields: [promoCodeId], references: [id])
-  customerId      String
-  organizationId  String
-  orderRef        String?
-  discountAmount  Decimal  @db.Decimal(10, 2)
-  orderAmount     Decimal  @db.Decimal(10, 2)
-  redeemedAt      DateTime @default(now())
+  id             String    @id @default(uuid())
+  promoCodeId    String
+  promoCode      PromoCode @relation(fields: [promoCodeId], references: [id])
+  customerId     String
+  organizationId String
+  orderRef       String?
+  discountAmount Decimal   @db.Decimal(10, 2)
+  orderAmount    Decimal   @db.Decimal(10, 2)
+  redeemedAt     DateTime  @default(now())
 
   @@index([promoCodeId])
   @@index([customerId])
@@ -795,19 +1010,19 @@ model PromoRedemption {
 // ─── PLB Engine ─────────────────────────────────────────
 
 model PLBProgram {
-  id              String   @id @default(uuid())
-  organizationId  String
-  name            String
-  description     String?
-  cycleType       String   // MONTHLY | QUARTERLY | ANNUAL | CUSTOM
-  cycleStart      DateTime
-  cycleEnd        DateTime
-  metricDefinitions Json   // [{ name, type, target, weight }]
-  slabDefinitions   Json   // [{ min, max, incentiveType, incentiveValue }]
-  status          String   @default("DRAFT") // DRAFT | ACTIVE | CLOSED | ARCHIVED
-  approvalRequired Boolean @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id                String   @id @default(uuid())
+  organizationId    String
+  name              String
+  description       String?
+  cycleType         String // MONTHLY | QUARTERLY | ANNUAL | CUSTOM
+  cycleStart        DateTime
+  cycleEnd          DateTime
+  metricDefinitions Json // [{ name, type, target, weight }]
+  slabDefinitions   Json // [{ min, max, incentiveType, incentiveValue }]
+  status            String   @default("DRAFT") // DRAFT | ACTIVE | CLOSED | ARCHIVED
+  approvalRequired  Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   @@index([organizationId])
   @@index([status])
@@ -815,40 +1030,42 @@ model PLBProgram {
 }
 
 model PLBMetric {
-  id              String   @id @default(uuid())
-  programId       String
-  entityId        String   // customer/partner/agent
-  entityType      String   @default("CUSTOMER")
-  metricName      String
-  metricValue     Decimal  @db.Decimal(18, 6)
-  targetValue     Decimal  @db.Decimal(18, 6)
-  achievementPct  Decimal  @db.Decimal(5, 2)
-  periodStart     DateTime
-  periodEnd       DateTime
-  recordedAt      DateTime @default(now())
+  id             String   @id @default(uuid())
+  programId      String
+  entityId       String // customer/partner/agent
+  entityType     String   @default("CUSTOMER")
+  metricName     String
+  metricValue    Decimal  @db.Decimal(18, 6)
+  targetValue    Decimal  @db.Decimal(18, 6)
+  achievementPct Decimal  @db.Decimal(5, 2)
+  periodStart    DateTime
+  periodEnd      DateTime
+  recordedAt     DateTime @default(now())
 
+  @@unique([programId, entityId, periodStart, periodEnd, metricName], name: "plb_metric_period_unique")
   @@index([programId, entityId])
   @@index([periodEnd])
   @@map("plbMetric")
 }
 
 model PLBBonus {
-  id              String   @id @default(uuid())
-  programId       String
-  entityId        String
-  cycleStart      DateTime
-  cycleEnd        DateTime
-  slabName        String?
-  incentiveType   String   // CASH | POINTS | CREDIT | VOUCHER
-  incentiveValue  Decimal  @db.Decimal(18, 6)
-  currency        String   @default("INR")
-  status          String   @default("PENDING") // PENDING | APPROVED | PAID | REJECTED
-  approvedBy      String?
-  approvedAt      DateTime?
-  payoutRef       String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id             String    @id @default(uuid())
+  programId      String
+  entityId       String
+  cycleStart     DateTime
+  cycleEnd       DateTime
+  slabName       String?
+  incentiveType  String // CASH | POINTS | CREDIT | VOUCHER
+  incentiveValue Decimal   @db.Decimal(18, 6)
+  currency       String    @default("INR")
+  status         String    @default("PENDING") // PENDING | APPROVED | PAID | REJECTED
+  approvedBy     String?
+  approvedAt     DateTime?
+  payoutRef      String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
+  @@unique([programId, entityId, cycleStart, cycleEnd], name: "plb_bonus_cycle_unique")
   @@index([programId, entityId])
   @@index([status])
   @@map("plbBonus")
@@ -857,26 +1074,26 @@ model PLBBonus {
 // ─── Value Exchange Engine ──────────────────────────────
 
 model ExchangeAgreement {
-  id              String   @id @default(uuid())
+  id              String    @id @default(uuid())
   name            String
-  sourceEntityId  String   // source organization/partner
-  targetEntityId  String   // target organization/partner
-  sourceCurrency  String   // source loyalty currency code
-  targetCurrency  String   // target loyalty currency code
-  conversionRatio Decimal  @db.Decimal(10, 6) // 1 source = X target
-  minAmount       Int?     // minimum exchange amount
-  maxAmount       Int?     // maximum per transaction
-  dailyCap        Int?     // daily limit
-  monthlyCap      Int?     // monthly limit
-  isActive        Boolean  @default(true)
-  trustModel      String   @default("BILATERAL") // BILATERAL | PLATFORM_MEDIATED | CONSORTIUM
-  settlementModel String   @default("REAL_TIME") // REAL_TIME | DEFERRED
-  breakageOwner   String   @default("ISSUER") // ISSUER | PLATFORM | SHARED
-  version         Int      @default(1)
-  effectiveFrom   DateTime @default(now())
+  sourceEntityId  String // source organization/partner
+  targetEntityId  String // target organization/partner
+  sourceCurrency  String // source loyalty currency code
+  targetCurrency  String // target loyalty currency code
+  conversionRatio Decimal   @db.Decimal(10, 6) // 1 source = X target
+  minAmount       Int? // minimum exchange amount
+  maxAmount       Int? // maximum per transaction
+  dailyCap        Int? // daily limit
+  monthlyCap      Int? // monthly limit
+  isActive        Boolean   @default(true)
+  trustModel      String    @default("BILATERAL") // BILATERAL | PLATFORM_MEDIATED | CONSORTIUM
+  settlementModel String    @default("REAL_TIME") // REAL_TIME | DEFERRED
+  breakageOwner   String    @default("ISSUER") // ISSUER | PLATFORM | SHARED
+  version         Int       @default(1)
+  effectiveFrom   DateTime  @default(now())
   effectiveUntil  DateTime?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   @@unique([sourceEntityId, targetEntityId, sourceCurrency, targetCurrency])
   @@index([sourceEntityId])
@@ -884,22 +1101,43 @@ model ExchangeAgreement {
   @@map("exchangeAgreement")
 }
 
+model ExchangeQuote {
+  id               String    @id @default(uuid())
+  agreementId      String
+  sourceEntityId   String
+  sourceCustomerId String
+  sourceAmount     Int
+  targetAmount     Int
+  sourceCurrency   String
+  targetCurrency   String
+  conversionRatio  Decimal   @db.Decimal(10, 6)
+  spread           Decimal   @db.Decimal(10, 6)
+  effectiveRate    Decimal   @db.Decimal(10, 6)
+  expiresAt        DateTime
+  consumedAt       DateTime?
+  createdAt        DateTime  @default(now())
+
+  @@index([sourceEntityId, sourceCustomerId])
+  @@index([expiresAt])
+  @@map("exchangeQuote")
+}
+
 model ExchangeOrder {
-  id              String   @id @default(uuid())
-  agreementId     String
-  sourceEntityId  String
-  targetEntityId  String
+  id               String    @id @default(uuid())
+  agreementId      String
+  sourceEntityId   String
+  targetEntityId   String
   sourceCustomerId String
   targetCustomerId String?
-  sourceAmount    Int
-  targetAmount    Int
-  conversionRate  Decimal  @db.Decimal(10, 6)
-  status          String   @default("PENDING") // PENDING | PROCESSING | COMPLETED | REVERSED | FAILED
-  reversalReason  String?
-  reversedAt      DateTime?
-  referenceId     String   @unique
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  sourceAmount     Int
+  targetAmount     Int
+  conversionRate   Decimal   @db.Decimal(10, 6)
+  status           String    @default("PENDING") // PENDING | PROCESSING | COMPLETED | REVERSED | FAILED
+  reversalReason   String?
+  reversedAt       DateTime?
+  referenceId      String    @unique
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   @@index([agreementId])
   @@index([sourceCustomerId])
@@ -911,7 +1149,7 @@ model ExchangeOrder {
 model ExchangeAuditLog {
   id              String   @id @default(uuid())
   exchangeOrderId String
-  action          String   // QUOTED | EXECUTED | REVERSED | FAILED
+  action          String // QUOTED | EXECUTED | REVERSED | FAILED
   details         Json?
   createdAt       DateTime @default(now())
 

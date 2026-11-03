@@ -2,34 +2,35 @@ import { MailerModule } from '@nestjs-modules/mailer';
 import { CacheModule } from '@nestjs/cache-manager';
 import { MiddlewareConsumer, Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { APP_INTERCEPTOR } from '@nestjs/core';
-import { WinstonModule } from 'nest-winston';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AppController } from './app.controller';
-import { envEnums } from './config/enums';
-import { envSchema } from './config/env-schema';
+import { envEnums } from 'src/config/enums';
+import { envSchema } from 'src/config/env-schema';
 import { IncomingReqResLoggingInterceptor } from './interceptors/log/incoming-req-res-logger.interceptor';
-import { CurrencyModule } from './modules/domain/currency/currency.module';
-import { CustomerModule } from './modules/domain/customer/customer.module';
-import { CustomerOrganizationOrderModule } from './modules/domain/customer-organization-order/customer-organization-order.module';
-import { MailAndSmsModule } from './modules/domain/mail-and-sms/mail-and-sms.module';
-import { OrganizationModule } from './modules/domain/organization/organization.module';
-import { OrganizationOrderModule } from './modules/domain/organization-order/organization-order.module';
+import { TenantScopeInterceptor } from './interceptors/tenant/tenant-scope.interceptor';
+import { DeprecationInterceptor } from './interceptors/deprecation/deprecation.interceptor';
+import { CurrencyModule } from './modules/currency/currency.module';
+import { CustomerModule } from './modules/customer/customer.module';
+import { CustomerOrganizationOrderModule } from './modules/customer-organization-order/customer-organization-order.module';
+import { MailAndSmsModule } from './modules/mail-and-sms/mail-and-sms.module';
+import { OrganizationModule } from './modules/organization/organization.module';
+import { OrganizationOrderModule } from './modules/organization-order/organization-order.module';
 import { HealthModule } from './modules/health/health.module';
 import { OutgoingHttpModule } from './modules/http/http.module';
 import { redisInsStore } from 'cache-manager-redis-yet';
-import { REDIS_CLIENT } from './common/services/cache/redis-client.constants';
-import { RedisModule } from './common/services/cache/redis.module';
-import { AdminModule } from './modules/domain/admin/admin.module';
-import { PointsModule } from './modules/domain/points/points.module';
-import { PromoModule } from './modules/domain/promo/promo.module';
+import { REDIS_CLIENT } from 'src/common/services/cache/redis-client.constants';
+import { RedisModule } from 'src/common/services/cache/redis.module';
+import { AdminModule } from './modules/admin/admin.module';
+import { PointsModule } from './modules/points/points.module';
+import { PromoModule } from './modules/promo/promo.module';
 import { PrometheusMiddleware } from './middlewares/prometheus.middleware';
 import { ListenerModule } from './modules/listener/listener.module';
-import { ShopModule } from './modules/domain/shop/shop.module';
-import { FXEngineModule } from './modules/domain/productised-commercial-engines/fx-engine';
-import { LoyaltyEngineModule } from './modules/domain/productised-commercial-engines/loyalty-engine';
-import { PromoEngineModule } from './modules/domain/productised-commercial-engines/promo-engine';
-import { PLBEngineModule } from './modules/domain/productised-commercial-engines/plb-engine';
-import { ValueExchangeEngineModule } from './modules/domain/productised-commercial-engines/value-exchange-engine';
+import { ShopModule } from './modules/shop/shop.module';
+import { FXEngineModule } from './engines/fx-engine';
+import { LoyaltyEngineModule } from './engines/loyalty-engine';
+import { PLBEngineModule } from './engines/plb-engine';
+import { ValueExchangeEngineModule } from './engines/value-exchange-engine';
 
 @Module({
   imports: [
@@ -80,15 +81,30 @@ import { ValueExchangeEngineModule } from './modules/domain/productised-commerci
     // ─── Productised Commercial Engines ─────────────────
     FXEngineModule,
     LoyaltyEngineModule,
-    PromoEngineModule,
     PLBEngineModule,
     ValueExchangeEngineModule,
+    ThrottlerModule.forRoot({
+      ttl: 60,
+      limit: 120,
+    }),
   ],
   controllers: [AppController],
   providers: [
     {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
+    {
       provide: APP_INTERCEPTOR,
       useClass: IncomingReqResLoggingInterceptor,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: TenantScopeInterceptor,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: DeprecationInterceptor,
     },
   ],
 })

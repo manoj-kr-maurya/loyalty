@@ -15,4 +15,7 @@ export enum LongListEnumOfAgendaJobs {
 
   // Campaign Jobs
   CAMPAIGN_EXPIRY_REMINDER = 'campaignExpiryReminder',
+
+  // Loyalty Jobs
+  LOYALTY_WEBHOOK_DISPATCH = 'loyaltyWebhookDispatch',
 }

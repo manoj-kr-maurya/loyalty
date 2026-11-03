@@ -1,0 +1,2305 @@
+{
+  "info": {
+    "name": "JAS Loyalty Engine",
+    "description": "Postman collection for JAS Loyalty Engine microservice (NestJS). Set `baseUrl` and `apiKey` (see .env ADMIN_API_KEY). Protected tenant calls send `x-api-key`; customer-session calls send `Authorization: Bearer {{customerSessionToken}}`; tenant staff calls send `Authorization: Bearer {{orgToken}}`. OTP is `123456` in local env. Shopper OTP endpoints are deprecated (410) - use `POST /customer/session` to mint a tenant-delegated session token.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3003" },
+    { "key": "apiKey", "value": "gyhewd8x34y87ddsyn9738t94587rfybds09t478fts7ndyr7yfd0gyn7t" },
+    { "key": "organizationId", "value": "org-cool-camp" },
+    { "key": "customerId", "value": "cust-ibiza-77" },
+    { "key": "currencyCode", "value": "PTS" },
+    { "key": "orgUsername", "value": "demo_admin" },
+    { "key": "orgPassword", "value": "ChangeMe123!" },
+    { "key": "challengeId", "value": "" },
+    { "key": "orgToken", "value": "" },
+    { "key": "customerSessionToken", "value": "" },
+    { "key": "orgApiKey", "value": "" },
+    { "key": "apiKeyId", "value": "" },
+    { "key": "webhookId", "value": "" },
+    { "key": "deliveryId", "value": "" },
+    { "key": "orderId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "System",
+      "item": [
+        {
+          "name": "Service check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/", "host": ["{{baseUrl}}"], "path": [""] }
+          }
+        },
+        {
+          "name": "Restart server (crash token)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "lsb-crash-token", "value": "REDIS_PASSWORD" }],
+            "url": { "raw": "{{baseUrl}}/restart", "host": ["{{baseUrl}}"], "path": ["restart"] }
+          }
+        },
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/health", "host": ["{{baseUrl}}"], "path": ["health"] }
+          }
+        },
+        {
+          "name": "Health readiness",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/health/readiness", "host": ["{{baseUrl}}"], "path": ["health", "readiness"] }
+          }
+        },
+        {
+          "name": "Health liveness",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/health/liveness", "host": ["{{baseUrl}}"], "path": ["health", "liveness"] }
+          }
+        },
+        {
+          "name": "Metrics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/metrics", "host": ["{{baseUrl}}"], "path": ["metrics"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth - Organization & Customer",
+      "item": [
+        {
+          "name": "Org: send OTP (public)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"countryCode\": \"+91\",\n  \"phoneNumber\": \"9876543210\",\n  \"name\": \"Cool Camp\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/organization/otp/phone", "host": ["{{baseUrl}}"], "path": ["organization", "otp", "phone"] }
+          }
+        },
+        {
+          "name": "Org: validate OTP (public) - OTP is 123456 locally",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"{{organizationId}}\",\n  \"otp\": \"123456\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/organization/otp/validate", "host": ["{{baseUrl}}"], "path": ["organization", "otp", "validate"] },
+            "description": "Returns the org JWT at data.organization.token (used by /organization/auth/set-credentials). OTP is 123456 in local/dev/stage."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "const data = body.data || body;",
+                  "const org = data && data.organization;",
+                  "if (org && org.token) pm.collectionVariables.set('orgToken', org.token);",
+                  "if (org && org.id) pm.collectionVariables.set('organizationId', org.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Org: send interest (public)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phoneNumber\": \"9876543210\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/organization/send-interest", "host": ["{{baseUrl}}"], "path": ["organization", "send-interest"] }
+          }
+        },
+        {
+          "name": "Customer: send OTP (DEPRECATED)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"countryCode\": \"+91\",\n  \"phoneNumber\": \"9876543210\",\n  \"name\": \"John Doe\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/customer/otp/phone", "host": ["{{baseUrl}}"], "path": ["customer", "otp", "phone"] },
+            "description": "DEPRECATED: returns 410 when CUSTOMER_OTP_ENABLED=false. Use POST /customer/session instead."
+          }
+        },
+        {
+          "name": "Customer: validate OTP - returns JWT token (DEPRECATED)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"{{customerId}}\",\n  \"otp\": \"123456\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/customer/otp/validate", "host": ["{{baseUrl}}"], "path": ["customer", "otp", "validate"] },
+            "description": "DEPRECATED: returns 410 when CUSTOMER_OTP_ENABLED=false. Use POST /customer/session instead."
+          }
+        },
+        {
+          "name": "Org: logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organizationId\": \"{{organizationId}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/organization/logout", "host": ["{{baseUrl}}"], "path": ["organization", "logout"] }
+          }
+        },
+        {
+          "name": "Customer: logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"{{customerId}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/customer/logout", "host": ["{{baseUrl}}"], "path": ["customer", "logout"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth - Tenant Staff",
+      "description": "Tenant staff login: username + password, then OTP, then a JWT. Set credentials once using the JWT from the organization OTP flow.",
+      "item": [
+        {
+          "name": "Set credentials (first-time)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{orgToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{orgUsername}}\",\n  \"password\": \"{{orgPassword}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/organization/auth/set-credentials", "host": ["{{baseUrl}}"], "path": ["organization", "auth", "set-credentials"] },
+            "description": "One-time credential setup. Requires the org JWT returned at data.organization.token by POST /organization/otp/validate (or data.token from /organization/auth/verify-otp). Response never includes passwordHash."
+          }
+        },
+        {
+          "name": "Login (password -> OTP)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{orgUsername}}\",\n  \"password\": \"{{orgPassword}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/organization/auth/login", "host": ["{{baseUrl}}"], "path": ["organization", "auth", "login"] },
+            "description": "Verifies username/password, then sends an OTP to the registered mobile and returns a challengeId."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "const data = body.data || body;",
+                  "if (data && data.challengeId) pm.collectionVariables.set('challengeId', data.challengeId);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Verify login OTP",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"challengeId\": \"{{challengeId}}\",\n  \"otp\": \"123456\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/organization/auth/verify-otp", "host": ["{{baseUrl}}"], "path": ["organization", "auth", "verify-otp"] },
+            "description": "Completes tenant staff login. OTP is 123456 in local/dev/stage. Stores orgToken and organizationId."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "const data = body.data || body;",
+                  "if (data && data.token) pm.collectionVariables.set('orgToken', data.token);",
+                  "if (data && data.organization && data.organization.id) pm.collectionVariables.set('organizationId', data.organization.id);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "API Keys",
+      "description": "Manage tenant-scoped API keys. Scopes: loyalty/promo/fx/plb/exchange read+write, webhooks:manage, api-keys:manage.",
+      "item": [
+        {
+          "name": "Create API key",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{apiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organizationId\": \"{{organizationId}}\",\n  \"name\": \"Postman key\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/api-keys", "host": ["{{baseUrl}}"], "path": ["api-keys"] },
+            "description": "Creates an organization API key. Plaintext key is returned once; scopes default to every scope when omitted. Requires the platform key (ADMIN_API_KEY) or an api-keys:manage key."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "const data = body.data || body;",
+                  "if (data && data.key) pm.collectionVariables.set('orgApiKey', data.key);",
+                  "if (data && data.id) pm.collectionVariables.set('apiKeyId', data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List API keys",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api-keys?organizationId={{organizationId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api-keys"],
+              "query": [{ "key": "organizationId", "value": "{{organizationId}}" }]
+            }
+          }
+        },
+        {
+          "name": "Revoke API key",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api-keys/{{apiKeyId}}?organizationId={{organizationId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api-keys", "{{apiKeyId}}"],
+              "query": [{ "key": "organizationId", "value": "{{organizationId}}" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Customer",
+      "item": [
+        {
+          "name": "Create customer session (tenant delegated)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{apiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"externalId\": \"shopper-1001\",\n  \"phoneNumber\": \"9876500001\",\n  \"countryCode\": \"91\",\n  \"name\": \"Delegated Shopper\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/customer/session?organizationId={{organizationId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["customer", "session"],
+              "query": [{ "key": "organizationId", "value": "{{organizationId}}" }]
+            },
+            "description": "Exchanges the tenant assertion of a shopper identity for a 15m tenant-scoped customer session token. No shopper OTP is involved. Stores customerSessionToken and customerId."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "const data = body.data || body;",
+                  "if (data && data.token) pm.collectionVariables.set('customerSessionToken', data.token);",
+                  "if (data && data.customer && data.customer.id) pm.collectionVariables.set('customerId', data.customer.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get my profile (customer session)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{customerSessionToken}}" }],
+            "url": { "raw": "{{baseUrl}}/customer/me", "host": ["{{baseUrl}}"], "path": ["customer", "me"] }
+          }
+        },
+        {
+          "name": "Update my profile (customer session)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{customerSessionToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Delegated Shopper (updated)\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/customer/me", "host": ["{{baseUrl}}"], "path": ["customer", "me"] }
+          }
+        },
+        {
+          "name": "Get my wallets (customer session)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{customerSessionToken}}" }],
+            "url": { "raw": "{{baseUrl}}/customer/me/wallets", "host": ["{{baseUrl}}"], "path": ["customer", "me", "wallets"] }
+          }
+        },
+        {
+          "name": "Get my orders (customer session)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{customerSessionToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/customer/me/orders?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["customer", "me", "orders"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get my statement (customer session)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{customerSessionToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/customer/me/statement?currencyCode={{currencyCode}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["customer", "me", "statement"],
+              "query": [{ "key": "currencyCode", "value": "{{currencyCode}}" }]
+            }
+          }
+        },
+        {
+          "name": "Get customer",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/customer/?customerId={{customerId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["customer", ""],
+              "query": [{ "key": "customerId", "value": "{{customerId}}" }]
+            }
+          }
+        },
+        {
+          "name": "Get customer by id",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": { "raw": "{{baseUrl}}/customer/{{customerId}}", "host": ["{{baseUrl}}"], "path": ["customer", "{{customerId}}"] }
+          }
+        },
+        {
+          "name": "Update customer",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"{{customerId}}\",\n  \"name\": \"John Doe\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/customer/update", "host": ["{{baseUrl}}"], "path": ["customer", "update"] }
+          }
+        },
+        {
+          "name": "Leaderboard: top customers",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": { "raw": "{{baseUrl}}/customer/leader-board/top-customers", "host": ["{{baseUrl}}"], "path": ["customer", "leader-board", "top-customers"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Promotions (promo)",
+      "item": [
+        {
+          "name": "Create promotion",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organizationId\": \"{{organizationId}}\",\n  \"name\": \"Flat 20% Off\",\n  \"description\": \"Bank offer for festive season\",\n  \"couponCode\": \"DIWALI20\",\n  \"couponValue\": 20,\n  \"subTitle\": \"Up to Rs 500 off\",\n  \"rewardType\": \"PERCENTAGE\",\n  \"minBankAmount\": 0,\n  \"minimumCartValue\": 1000,\n  \"maxDiscountValue\": 500,\n  \"businessType\": [],\n  \"maxClaimsPerUser\": 1,\n  \"maxClaimsTotal\": 1000,\n  \"attributes\": {},\n  \"channels\": [\"all\"],\n  \"validFrom\": \"2026-09-01\",\n  \"validTo\": \"2026-12-31\",\n  \"eligibilityCriteria\": { \"allCustomers\": true }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/promo/create", "host": ["{{baseUrl}}"], "path": ["promo", "create"] }
+          }
+        },
+        {
+          "name": "Evaluate promotions",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organizationId\": \"{{organizationId}}\",\n  \"customerId\": \"{{customerId}}\",\n  \"cartValue\": 5000,\n  \"cartCategories\": [\"electronics\"],\n  \"isBankOffer\": false,\n  \"channel\": \"app\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/promo/evaluate", "host": ["{{baseUrl}}"], "path": ["promo", "evaluate"] }
+          }
+        },
+        {
+          "name": "Get active promotions",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organizationId\": \"{{organizationId}}\",\n  \"customerId\": \"{{customerId}}\",\n  \"cartValue\": 5000,\n  \"cartCategories\": [],\n  \"isBankOffer\": false,\n  \"channel\": \"app\",\n  \"page\": 1,\n  \"limit\": 50\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/promo/active", "host": ["{{baseUrl}}"], "path": ["promo", "active"] }
+          }
+        },
+        {
+          "name": "List promotions (admin)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/promo/list?organizationId={{organizationId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["promo", "list"],
+              "query": [{ "key": "organizationId", "value": "{{organizationId}}" }]
+            }
+          }
+        },
+        {
+          "name": "Get promotion by id",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": { "raw": "{{baseUrl}}/promo/prog-123", "host": ["{{baseUrl}}"], "path": ["promo", "prog-123"] }
+          }
+        },
+        {
+          "name": "Update promotion",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Flat 25% Off\",\n  \"rewardType\": \"PERCENTAGE\",\n  \"maxDiscountValue\": 600,\n  \"validFrom\": \"2026-09-01\",\n  \"validTo\": \"2026-12-31\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/promo/prog-123/update", "host": ["{{baseUrl}}"], "path": ["promo", "prog-123", "update"] }
+          }
+        },
+        {
+          "name": "Add promotion rules",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rules\": [\n    { \"name\": \"Min cart\", \"rewardType\": \"DISCOUNT\", \"rewardMode\": \"PERCENTAGE\", \"value\": 20, \"conditions\": { \"minimumCartValue\": 1000 }, \"threshold\": 1000, \"ratioBase\": 1 }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/promo/prog-123/rules", "host": ["{{baseUrl}}"], "path": ["promo", "prog-123", "rules"] }
+          }
+        },
+        {
+          "name": "Coupon: check",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"DIWALI20\",\n  \"organizationId\": \"{{organizationId}}\",\n  \"customerId\": \"{{customerId}}\",\n  \"cartValue\": 3000,\n  \"channel\": \"app\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/promo/coupon/check", "host": ["{{baseUrl}}"], "path": ["promo", "coupon", "check"] }
+          }
+        },
+        {
+          "name": "Coupon: allocate",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"programId\": \"prog-123\",\n  \"customerId\": \"{{customerId}}\",\n  \"couponCode\": \"DIWALI20\",\n  \"discountAmount\": 600,\n  \"currency\": \"{{currencyCode}}\",\n  \"meta\": { \"source\": \"campaign\" }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/promo/coupon/allocate", "host": ["{{baseUrl}}"], "path": ["promo", "coupon", "allocate"] }
+          }
+        },
+        {
+          "name": "Coupon: block",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"blockId\": \"block-123\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/promo/coupon/block", "host": ["{{baseUrl}}"], "path": ["promo", "coupon", "block"] }
+          }
+        },
+        {
+          "name": "Coupon: release",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"blockId\": \"block-123\",\n  \"reason\": \"cart abandoned\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/promo/coupon/release", "host": ["{{baseUrl}}"], "path": ["promo", "coupon", "release"] }
+          }
+        },
+        {
+          "name": "Coupon: claim",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"blockId\": \"block-123\",\n  \"customerId\": \"{{customerId}}\",\n  \"couponCode\": \"DIWALI20\",\n  \"transactionRef\": \"TX-001\",\n  \"claimedAmount\": 600\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/promo/coupon/claim", "host": ["{{baseUrl}}"], "path": ["promo", "coupon", "claim"] }
+          }
+        },
+        {
+          "name": "Coupons of a customer",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": { "raw": "{{baseUrl}}/promo/coupon/customer/{{customerId}}", "host": ["{{baseUrl}}"], "path": ["promo", "coupon", "customer", "{{customerId}}"] }
+          }
+        },
+        {
+          "name": "Coupon by block id",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": { "raw": "{{baseUrl}}/promo/coupon/block-123", "host": ["{{baseUrl}}"], "path": ["promo", "coupon", "block-123"] }
+          }
+        },
+        {
+          "name": "Claim: record",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"{{customerId}}\",\n  \"programId\": \"prog-123\",\n  \"rewardType\": \"DISCOUNT\",\n  \"amount\": 600,\n  \"currency\": \"{{currencyCode}}\",\n  \"transactionRef\": \"TX-001\",\n  \"details\": {}\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/promo/claim/record", "host": ["{{baseUrl}}"], "path": ["promo", "claim", "record"] }
+          }
+        },
+        {
+          "name": "Claim: revoke",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"claimId\": \"claim-123\",\n  \"reason\": \"fraud detected\",\n  \"actor\": \"admin\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/promo/claim/revoke", "host": ["{{baseUrl}}"], "path": ["promo", "claim", "revoke"] }
+          }
+        },
+        {
+          "name": "Claim by id",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": { "raw": "{{baseUrl}}/promo/claim/claim-123", "host": ["{{baseUrl}}"], "path": ["promo", "claim", "claim-123"] }
+          }
+        },
+        {
+          "name": "Claim summary for customer",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": { "raw": "{{baseUrl}}/promo/claim/summary/{{customerId}}", "host": ["{{baseUrl}}"], "path": ["promo", "claim", "summary", "{{customerId}}"] }
+          }
+        },
+        {
+          "name": "Codes: generate",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"programId\": \"prog-123\",\n  \"isUserSpecific\": false,\n  \"count\": 10,\n  \"codeLength\": 8,\n  \"maxUses\": 1,\n  \"expiresAt\": \"2026-12-31\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/promo/codes/generate", "host": ["{{baseUrl}}"], "path": ["promo", "codes", "generate"] }
+          }
+        },
+        {
+          "name": "Codes: validate",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"DIWALI20\",\n  \"customerId\": \"{{customerId}}\",\n  \"cartValue\": 3000,\n  \"isBankOffer\": false\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/promo/codes/validate", "host": ["{{baseUrl}}"], "path": ["promo", "codes", "validate"] }
+          }
+        },
+        {
+          "name": "Codes: allocate",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"programId\": \"prog-123\",\n  \"customerId\": \"{{customerId}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/promo/codes/allocate", "host": ["{{baseUrl}}"], "path": ["promo", "codes", "allocate"] }
+          }
+        },
+        {
+          "name": "Codes: claim",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"DIWALI20\",\n  \"customerId\": \"{{customerId}}\",\n  \"transactionRef\": \"TX-001\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/promo/codes/claim", "host": ["{{baseUrl}}"], "path": ["promo", "codes", "claim"] }
+          }
+        },
+        {
+          "name": "Codes: list for program",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/promo/codes/prog-123?customerId={{customerId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["promo", "codes", "prog-123"],
+              "query": [{ "key": "customerId", "value": "{{customerId}}" }]
+            }
+          }
+        },
+        {
+          "name": "Code for a customer",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": { "raw": "{{baseUrl}}/promo/codes/prog-123/customer/{{customerId}}", "host": ["{{baseUrl}}"], "path": ["promo", "codes", "prog-123", "customer", "{{customerId}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Loyalty Programs (loyalty-programs)",
+      "item": [
+        {
+          "name": "Program: create",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organizationId\": \"{{organizationId}}\",\n  \"name\": \"Festive Program\",\n  \"description\": \"Earn 5% on purchases\",\n  \"currencyCode\": \"{{currencyCode}}\",\n  \"rules\": [\n    { \"name\": \"5% earn\", \"rewardType\": \"PERCENTAGE\", \"value\": 5 }\n  ],\n  \"eligibility\": { \"allCustomers\": true },\n  \"startDate\": \"2026-09-01\",\n  \"endDate\": \"2026-12-31\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/loyalty-programs/program/create", "host": ["{{baseUrl}}"], "path": ["loyalty-programs", "program", "create"] }
+          }
+        },
+        {
+          "name": "Find eligible programs",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organizationId\": \"{{organizationId}}\",\n  \"customerId\": \"{{customerId}}\",\n  \"transactionAmount\": 5000,\n  \"currency\": \"{{currencyCode}}\",\n  \"context\": { \"amount\": 5000 }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/loyalty-programs/eligible", "host": ["{{baseUrl}}"], "path": ["loyalty-programs", "eligible"] }
+          }
+        },
+        {
+          "name": "Calculate rewards",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"programId\": \"prog-123\",\n  \"organizationId\": \"{{organizationId}}\",\n  \"customerId\": \"{{customerId}}\",\n  \"transactionAmount\": 5000,\n  \"currency\": \"{{currencyCode}}\",\n  \"rules\": []\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/loyalty-programs/calculate", "host": ["{{baseUrl}}"], "path": ["loyalty-programs", "calculate"] }
+          }
+        },
+        {
+          "name": "Block rewards",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"programId\": \"prog-123\",\n  \"customerId\": \"{{customerId}}\",\n  \"currency\": \"{{currencyCode}}\",\n  \"amount\": 500,\n  \"reference\": \"REF-1\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/loyalty-programs/block", "host": ["{{baseUrl}}"], "path": ["loyalty-programs", "block"] }
+          }
+        },
+        {
+          "name": "Award rewards",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"programId\": \"prog-123\",\n  \"customerId\": \"{{customerId}}\",\n  \"currency\": \"{{currencyCode}}\",\n  \"amount\": 500,\n  \"reference\": \"REF-1\",\n  \"rules\": []\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/loyalty-programs/award", "host": ["{{baseUrl}}"], "path": ["loyalty-programs", "award"] }
+          }
+        },
+        {
+          "name": "Reverse rewards",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"referenceId\": \"REF-1\",\n  \"programId\": \"prog-123\",\n  \"customerId\": \"{{customerId}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/loyalty-programs/reverse", "host": ["{{baseUrl}}"], "path": ["loyalty-programs", "reverse"] }
+          }
+        },
+        {
+          "name": "Expire rewards",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"programId\": \"prog-123\",\n  \"customerId\": \"{{customerId}}\",\n  \"amount\": 500\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/loyalty-programs/expire", "host": ["{{baseUrl}}"], "path": ["loyalty-programs", "expire"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Currency",
+      "item": [
+        {
+          "name": "Create currency",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organizationId\": \"{{organizationId}}\",\n  \"currencyCode\": \"PTS\",\n  \"name\": \"Points\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/currency/create", "host": ["{{baseUrl}}"], "path": ["currency", "create"] }
+          }
+        },
+        {
+          "name": "Create organization currency bucket",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organizationId\": \"{{organizationId}}\",\n  \"currencyCode\": \"{{currencyCode}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/currency/create-organization-currency-bucket", "host": ["{{baseUrl}}"], "path": ["currency", "create-organization-currency-bucket"] }
+          }
+        },
+        {
+          "name": "Get organization currency buckets",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/currency/get-organization-currency-buckets?organizationId={{organizationId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["currency", "get-organization-currency-buckets"],
+              "query": [{ "key": "organizationId", "value": "{{organizationId}}" }]
+            }
+          }
+        },
+        {
+          "name": "Add balance to currency bucket",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organizationId\": \"{{organizationId}}\",\n  \"currencyCode\": \"{{currencyCode}}\",\n  \"amount\": 10000\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/currency/add-balance-to-organization-currency-bucket", "host": ["{{baseUrl}}"], "path": ["currency", "add-balance-to-organization-currency-bucket"] }
+          }
+        },
+        {
+          "name": "Update currency bucket properties",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"bucket-123\",\n  \"autoTopUpEnabled\": true,\n  \"autoTopUpThreshold\": 1000,\n  \"autoTopUpAmount\": 5000\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/currency/update-organization-currency-bucket", "host": ["{{baseUrl}}"], "path": ["currency", "update-organization-currency-bucket"] }
+          }
+        },
+        {
+          "name": "Search non-organization currencies",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/currency/search/non-organization/POI?organizationId={{organizationId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["currency", "search", "non-organization", "POI"],
+              "query": [{ "key": "organizationId", "value": "{{organizationId}}" }]
+            }
+          }
+        },
+        {
+          "name": "Org data needed by customer",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organizationId\": \"{{organizationId}}\",\n  \"customerId\": \"{{customerId}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/currency/org-data-needed-by-customer", "host": ["{{baseUrl}}"], "path": ["currency", "org-data-needed-by-customer"] }
+          }
+        },
+        {
+          "name": "Filter organization created currencies",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organizationId\": \"{{organizationId}}\",\n  \"currencyCodes\": [\"PTS\", \"COINS\"]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/currency/filter-organization-created-currencies", "host": ["{{baseUrl}}"], "path": ["currency", "filter-organization-created-currencies"] }
+          }
+        },
+        {
+          "name": "Confirm currency purchase (platform)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{apiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organizationId\": \"{{organizationId}}\",\n  \"orderId\": \"{{orderId}}\",\n  \"paymentReference\": \"PAY-REF-1001\",\n  \"paymentAmount\": 1000,\n  \"paymentProvider\": \"phonepe\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/currency/confirm-currency-purchase", "host": ["{{baseUrl}}"], "path": ["currency", "confirm-currency-purchase"] },
+            "description": "Platform-admin only. Credits the organization currency bucket after payment confirmation."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Campaign",
+      "item": [
+        {
+          "name": "Create organization level campaign",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organizationId\": \"{{organizationId}}\",\n  \"name\": \"Festive Campaign\",\n  \"description\": \"Earn 5% on all purchases\",\n  \"earningPercentage\": 5,\n  \"currencyCode\": \"{{currencyCode}}\",\n  \"startDate\": \"2026-09-01\",\n  \"endDate\": \"2026-12-31\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/campaign/create-organization-level-campaign", "host": ["{{baseUrl}}"], "path": ["campaign", "create-organization-level-campaign"] }
+          }
+        },
+        {
+          "name": "Get organization level campaigns",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/campaign/get-organization-level-campaigns?organizationId={{organizationId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["campaign", "get-organization-level-campaigns"],
+              "query": [{ "key": "organizationId", "value": "{{organizationId}}" }]
+            }
+          }
+        },
+        {
+          "name": "Get organization level campaign by id",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/campaign/get-organization-level-campaign/campaign-123?organizationId={{organizationId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["campaign", "get-organization-level-campaign", "campaign-123"],
+              "query": [{ "key": "organizationId", "value": "{{organizationId}}" }]
+            }
+          }
+        },
+        {
+          "name": "Update organization level campaign",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"campaign-123\",\n  \"organizationId\": \"{{organizationId}}\",\n  \"name\": \"Festive Campaign v2\",\n  \"earningPercentage\": 6,\n  \"currencyCode\": \"{{currencyCode}}\",\n  \"startDate\": \"2026-09-01\",\n  \"endDate\": \"2026-12-31\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/campaign/update-organization-level-campaign", "host": ["{{baseUrl}}"], "path": ["campaign", "update-organization-level-campaign"] }
+          }
+        },
+        {
+          "name": "Active campaigns potential earning",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organizationId\": \"{{organizationId}}\",\n  \"customerId\": \"{{customerId}}\",\n  \"amount\": 5000,\n  \"currencyCode\": \"{{currencyCode}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/campaign/get-active-campaigns-potential-earning", "host": ["{{baseUrl}}"], "path": ["campaign", "get-active-campaigns-potential-earning"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Customer Organization Orders",
+      "item": [
+        {
+          "name": "Create order",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organizationId\": \"{{organizationId}}\",\n  \"burningAmountDetails\": {\n    \"amount\": 5000,\n    \"cash\": { \"code\": \"INR\", \"name\": \"Indian Rupee\" },\n    \"coin\": { \"code\": \"{{currencyCode}}\" }\n  },\n  \"details\": {\n    \"customerId\": \"{{customerId}}\"\n  },\n  \"idempotencyKey\": \"ord-001\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/customer-organization/order", "host": ["{{baseUrl}}"], "path": ["customer-organization", "order"] }
+          }
+        },
+        {
+          "name": "Get customer orders",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/customer-organization/order/customer?organizationId={{organizationId}}&page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["customer-organization", "order", "customer"],
+              "query": [
+                { "key": "organizationId", "value": "{{organizationId}}" },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Potential order info",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": { "raw": "{{baseUrl}}/customer-organization/order/potential-order-info/ord-pot-123", "host": ["{{baseUrl}}"], "path": ["customer-organization", "order", "potential-order-info", "ord-pot-123"] }
+          }
+        },
+        {
+          "name": "Get organization orders",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/customer-organization/order/organization?organizationId={{organizationId}}&status=COMPLETED&page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["customer-organization", "order", "organization"],
+              "query": [
+                { "key": "organizationId", "value": "{{organizationId}}" },
+                { "key": "status", "value": "COMPLETED" },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update order status",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"COMPLETED\",\n  \"orderId\": \"order-123\",\n  \"organizationId\": \"{{organizationId}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/customer-organization/order/update", "host": ["{{baseUrl}}"], "path": ["customer-organization", "order", "update"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Customer Wallets",
+      "item": [
+        {
+          "name": "Fetch customer wallets",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/customer-wallets/fetch-customer-wallets?organizationId={{organizationId}}&page=1&limit=25",
+              "host": ["{{baseUrl}}"],
+              "path": ["customer-wallets", "fetch-customer-wallets"],
+              "query": [
+                { "key": "organizationId", "value": "{{organizationId}}" },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "25" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Fetch currency wallet pockets",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/customer-wallets/fetch-currency-wallet/wallet-123?organizationId={{organizationId}}&page=1&limit=25",
+              "host": ["{{baseUrl}}"],
+              "path": ["customer-wallets", "fetch-currency-wallet", "wallet-123"],
+              "query": [
+                { "key": "organizationId", "value": "{{organizationId}}" },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "25" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Broad customer balance",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/customer-wallets/broad-customer-balance?organizationId={{organizationId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["customer-wallets", "broad-customer-balance"],
+              "query": [{ "key": "organizationId", "value": "{{organizationId}}" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Organization",
+      "item": [
+        {
+          "name": "Get your admin",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/organization/get-your-admin?organizationId={{organizationId}}&orgAdminId=org-admin-1",
+              "host": ["{{baseUrl}}"],
+              "path": ["organization", "get-your-admin"],
+              "query": [
+                { "key": "organizationId", "value": "{{organizationId}}" },
+                { "key": "orgAdminId", "value": "org-admin-1" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get organization",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/organization/?organizationId={{organizationId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["organization", ""],
+              "query": [{ "key": "organizationId", "value": "{{organizationId}}" }]
+            }
+          }
+        },
+        {
+          "name": "Update organization",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organizationId\": \"{{organizationId}}\",\n  \"name\": \"Cool Camp\",\n  \"address\": \"123 Main Street, Bangalore\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/organization/update", "host": ["{{baseUrl}}"], "path": ["organization", "update"] }
+          }
+        },
+        {
+          "name": "Invite shop",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organizationId\": \"{{organizationId}}\",\n  \"phoneNumber\": \"9000000000\",\n  \"location\": \"Mumbai\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/organization/invite-shop", "host": ["{{baseUrl}}"], "path": ["organization", "invite-shop"] }
+          }
+        },
+        {
+          "name": "Invited shops",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/organization/invited-shops?organizationId={{organizationId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["organization", "invited-shops"],
+              "query": [{ "key": "organizationId", "value": "{{organizationId}}" }]
+            }
+          }
+        },
+        {
+          "name": "Leaderboard: top organizations",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/organization/leader-board/top-organizations?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["organization", "leader-board", "top-organizations"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Leaderboard: organization detail",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/organization/leader-board/organization/detail/org-admin-1?organizationId={{organizationId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["organization", "leader-board", "organization", "detail", "org-admin-1"],
+              "query": [{ "key": "organizationId", "value": "{{organizationId}}" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Organization Orders",
+      "item": [
+        {
+          "name": "Create order",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organizationId\": \"{{organizationId}}\",\n  \"orderType\": \"CURRENCY_REFILL\",\n  \"amount\": 500,\n  \"details\": {\n    \"currencyCode\": \"{{currencyCode}}\",\n    \"quantity\": 5000,\n    \"ratePerUnit\": 0.1,\n    \"cash\": { \"code\": \"INR\", \"name\": \"Indian Rupee\" }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/organization/order", "host": ["{{baseUrl}}"], "path": ["organization", "order"] }
+          }
+        },
+        {
+          "name": "Get orders",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/organization/order?organizationId={{organizationId}}&page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["organization", "order"],
+              "query": [
+                { "key": "organizationId", "value": "{{organizationId}}" },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get order by id",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/organization/order/order-123?organizationId={{organizationId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["organization", "order", "order-123"],
+              "query": [{ "key": "organizationId", "value": "{{organizationId}}" }]
+            }
+          }
+        },
+        {
+          "name": "Update order status",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"newStatus\": \"COMPLETED\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/organization/order/order-123", "host": ["{{baseUrl}}"], "path": ["organization", "order", "order-123"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin",
+      "item": [
+        {
+          "name": "Fetch all organizations",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/admin/fetch-all-organizations?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "fetch-all-organizations"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Fetch all customers",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/admin/fetch-all-customers?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "fetch-all-customers"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Fetch organization by id",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": { "raw": "{{baseUrl}}/admin/fetch-organization/{{organizationId}}", "host": ["{{baseUrl}}"], "path": ["admin", "fetch-organization", "{{organizationId}}"] }
+          }
+        },
+        {
+          "name": "Fetch customer by id",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": { "raw": "{{baseUrl}}/admin/fetch-customer/{{customerId}}", "host": ["{{baseUrl}}"], "path": ["admin", "fetch-customer", "{{customerId}}"] }
+          }
+        },
+        {
+          "name": "Fetch customer wallets",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/admin/fetch-customer-wallets/{{customerId}}?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "fetch-customer-wallets", "{{customerId}}"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Fetch customer orders",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/admin/fetch-customer-orders/{{customerId}}?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "fetch-customer-orders", "{{customerId}}"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Fetch organization campaigns",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/admin/fetch-organization-campaigns/{{organizationId}}?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "fetch-organization-campaigns", "{{organizationId}}"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Fetch organization currencies",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/admin/fetch-organization-currencies/{{organizationId}}?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "fetch-organization-currencies", "{{organizationId}}"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Fetch organization customer orders",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/admin/fetch-organization-customer-orders/{{organizationId}}?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "fetch-organization-customer-orders", "{{organizationId}}"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Invite org admin",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organizationId\": \"{{organizationId}}\",\n  \"name\": \"New Admin\",\n  \"phoneNumber\": \"9111111111\",\n  \"countryCode\": \"+91\",\n  \"role\": \"ADMIN\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/admin/invite-org-admin", "host": ["{{baseUrl}}"], "path": ["admin", "invite-org-admin"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Shop",
+      "item": [
+        {
+          "name": "Fetch active shops by org",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/shop/fetch-active-shops-by-org-id?organizationId={{organizationId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["shop", "fetch-active-shops-by-org-id"],
+              "query": [{ "key": "organizationId", "value": "{{organizationId}}" }]
+            }
+          }
+        },
+        {
+          "name": "Update shop",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organizationId\": \"{{organizationId}}\",\n  \"shopId\": \"shop-1\",\n  \"name\": \"Mumbai Store\",\n  \"city\": \"Mumbai\",\n  \"isActive\": true\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/shop/update", "host": ["{{baseUrl}}"], "path": ["shop", "update"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Mail & SMS",
+      "item": [
+        {
+          "name": "Get in touch",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"John\",\n  \"phoneNumber\": \"9876543210\",\n  \"email\": \"john@example.com\",\n  \"message\": \"I want to know more\",\n  \"organizationId\": \"{{organizationId}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/mail-and-sms/get-in-touch", "host": ["{{baseUrl}}"], "path": ["mail-and-sms", "get-in-touch"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Engines - Promo",
+      "item": [
+        {
+          "name": "Create promo code",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{apiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organizationId\": \"{{organizationId}}\",\n  \"code\": \"SUMMER25\",\n  \"name\": \"Summer Sale\",\n  \"description\": \"25% off\",\n  \"discountType\": \"PERCENTAGE\",\n  \"discountValue\": 25,\n  \"minOrderAmount\": 1000,\n  \"maxDiscount\": 500,\n  \"usageLimit\": 1000,\n  \"perUserLimit\": 1,\n  \"startDate\": \"2026-09-01\",\n  \"endDate\": \"2026-12-31\",\n  \"isStackable\": false,\n  \"applicableProducts\": []\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/engines/promo/codes", "host": ["{{baseUrl}}"], "path": ["engines", "promo", "codes"] }
+          }
+        },
+        {
+          "name": "Validate promo code",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{apiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"DIWALI20\",\n  \"organizationId\": \"{{organizationId}}\",\n  \"customerId\": \"{{customerId}}\",\n  \"orderAmount\": 3000,\n  \"productIds\": []\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/engines/promo/validate", "host": ["{{baseUrl}}"], "path": ["engines", "promo", "validate"] }
+          }
+        },
+        {
+          "name": "Redeem promo code",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{apiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"DIWALI20\",\n  \"organizationId\": \"{{organizationId}}\",\n  \"customerId\": \"{{customerId}}\",\n  \"orderAmount\": 3000,\n  \"orderRef\": \"ORD-1001\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/engines/promo/redeem", "host": ["{{baseUrl}}"], "path": ["engines", "promo", "redeem"] }
+          }
+        },
+        {
+          "name": "Evaluate stacking",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{apiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"codes\": [\"DIWALI20\", \"SUMMER25\"],\n  \"organizationId\": \"{{organizationId}}\",\n  \"customerId\": \"{{customerId}}\",\n  \"orderAmount\": 5000\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/engines/promo/stacking", "host": ["{{baseUrl}}"], "path": ["engines", "promo", "stacking"] }
+          }
+        },
+        {
+          "name": "Redemption history",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": { "raw": "{{baseUrl}}/engines/promo/redemptions/{{customerId}}/{{organizationId}}", "host": ["{{baseUrl}}"], "path": ["engines", "promo", "redemptions", "{{customerId}}", "{{organizationId}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Engines - Loyalty",
+      "item": [
+        {
+          "name": "Upsert tiers",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{apiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organizationId\": \"{{organizationId}}\",\n  \"tiers\": [\n    { \"name\": \"Silver\", \"level\": 1, \"minPoints\": 0, \"multiplier\": 1, \"benefits\": {}, \"color\": \"#C0C0C0\" },\n    { \"name\": \"Gold\", \"level\": 2, \"minPoints\": 1000, \"multiplier\": 1.5, \"benefits\": {}, \"color\": \"#FFD700\" }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/engines/loyalty/tiers", "host": ["{{baseUrl}}"], "path": ["engines", "loyalty", "tiers"] }
+          }
+        },
+        {
+          "name": "Get tiers",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": { "raw": "{{baseUrl}}/engines/loyalty/tiers/{{organizationId}}", "host": ["{{baseUrl}}"], "path": ["engines", "loyalty", "tiers", "{{organizationId}}"] }
+          }
+        },
+        {
+          "name": "Earn points",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{apiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"{{customerId}}\",\n  \"organizationId\": \"{{organizationId}}\",\n  \"amount\": 5000,\n  \"currencyCode\": \"{{currencyCode}}\",\n  \"orderRef\": \"ORD-1001\",\n  \"metadata\": { \"campaign\": \"festive\" }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/engines/loyalty/earn", "host": ["{{baseUrl}}"], "path": ["engines", "loyalty", "earn"] }
+          }
+        },
+        {
+          "name": "Burn points",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{apiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"{{customerId}}\",\n  \"organizationId\": \"{{organizationId}}\",\n  \"points\": 250,\n  \"currencyCode\": \"{{currencyCode}}\",\n  \"orderRef\": \"ORD-1002\",\n  \"metadata\": {}\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/engines/loyalty/burn", "host": ["{{baseUrl}}"], "path": ["engines", "loyalty", "burn"] }
+          }
+        },
+        {
+          "name": "Expire points",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{apiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organizationId\": \"{{organizationId}}\",\n  \"currencyCode\": \"{{currencyCode}}\",\n  \"expiryDate\": \"2026-12-31\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/engines/loyalty/expire", "host": ["{{baseUrl}}"], "path": ["engines", "loyalty", "expire"] }
+          }
+        },
+        {
+          "name": "Generate statement",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{apiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"{{customerId}}\",\n  \"organizationId\": \"{{organizationId}}\",\n  \"periodStart\": \"2026-09-01\",\n  \"periodEnd\": \"2026-09-30\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/engines/loyalty/statement", "host": ["{{baseUrl}}"], "path": ["engines", "loyalty", "statement"] }
+          }
+        },
+        {
+          "name": "Customer tier status",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": { "raw": "{{baseUrl}}/engines/loyalty/tier-status/{{customerId}}/{{organizationId}}", "host": ["{{baseUrl}}"], "path": ["engines", "loyalty", "tier-status", "{{customerId}}", "{{organizationId}}"] }
+          }
+        },
+        {
+          "name": "Service info",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": { "raw": "{{baseUrl}}/engines/loyalty", "host": ["{{baseUrl}}"], "path": ["engines", "loyalty"] }
+          }
+        },
+        {
+          "name": "Estimate points (no writes)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{apiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"{{customerId}}\",\n  \"organizationId\": \"{{organizationId}}\",\n  \"amount\": 2500,\n  \"currencyCode\": \"{{currencyCode}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/engines/loyalty/estimate", "host": ["{{baseUrl}}"], "path": ["engines", "loyalty", "estimate"] },
+            "description": "Dry-run earning calculation; no ledger writes."
+          }
+        },
+        {
+          "name": "Get customer ledger",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/engines/loyalty/ledger/{{customerId}}?organizationId={{organizationId}}&currencyCode={{currencyCode}}&page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["engines", "loyalty", "ledger", "{{customerId}}"],
+              "query": [
+                { "key": "organizationId", "value": "{{organizationId}}" },
+                { "key": "currencyCode", "value": "{{currencyCode}}" },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get my ledger (customer session)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{customerSessionToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/engines/loyalty/customer/ledger?currencyCode={{currencyCode}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["engines", "loyalty", "customer", "ledger"],
+              "query": [{ "key": "currencyCode", "value": "{{currencyCode}}" }]
+            }
+          }
+        },
+        {
+          "name": "Get my tier status (customer session)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{customerSessionToken}}" }],
+            "url": { "raw": "{{baseUrl}}/engines/loyalty/customer/tier-status/{{organizationId}}", "host": ["{{baseUrl}}"], "path": ["engines", "loyalty", "customer", "tier-status", "{{organizationId}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Engines - Loyalty Webhooks",
+      "description": "Webhook endpoint management, delivery audit and dead-letter retries (scope: webhooks:manage).",
+      "item": [
+        {
+          "name": "Create webhook",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{apiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organizationId\": \"{{organizationId}}\",\n  \"url\": \"https://example.com/hooks/loyalty\",\n  \"events\": [\n    \"points.earned\",\n    \"points.burned\"\n  ],\n  \"description\": \"Postman webhook\",\n  \"isActive\": true\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/engines/loyalty/webhooks", "host": ["{{baseUrl}}"], "path": ["engines", "loyalty", "webhooks"] },
+            "description": "Registers a webhook. The HMAC secret is generated and returned once. Events: points.earned, points.burned, points.expired, points.transferred, tier.upgraded. An empty events array subscribes to all events."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "const data = body.data || body;",
+                  "if (data && data.id) pm.collectionVariables.set('webhookId', data.id);",
+                  "if (data && data.secret) pm.collectionVariables.set('webhookSecret', data.secret);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List webhooks",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/engines/loyalty/webhooks?organizationId={{organizationId}}&includeInactive=false",
+              "host": ["{{baseUrl}}"],
+              "path": ["engines", "loyalty", "webhooks"],
+              "query": [
+                { "key": "organizationId", "value": "{{organizationId}}" },
+                { "key": "includeInactive", "value": "false" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "List dead-letter deliveries",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/engines/loyalty/webhooks/dead-letters?organizationId={{organizationId}}&limit=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["engines", "loyalty", "webhooks", "dead-letters"],
+              "query": [
+                { "key": "organizationId", "value": "{{organizationId}}" },
+                { "key": "limit", "value": "50" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "List deliveries for a webhook",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/engines/loyalty/webhooks/{{webhookId}}/deliveries?organizationId={{organizationId}}&page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["engines", "loyalty", "webhooks", "{{webhookId}}", "deliveries"],
+              "query": [
+                { "key": "organizationId", "value": "{{organizationId}}" },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Rotate webhook secret",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/engines/loyalty/webhooks/{{webhookId}}/rotate-secret?organizationId={{organizationId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["engines", "loyalty", "webhooks", "{{webhookId}}", "rotate-secret"],
+              "query": [{ "key": "organizationId", "value": "{{organizationId}}" }]
+            }
+          }
+        },
+        {
+          "name": "Send test event",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/engines/loyalty/webhooks/{{webhookId}}/test?organizationId={{organizationId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["engines", "loyalty", "webhooks", "{{webhookId}}", "test"],
+              "query": [{ "key": "organizationId", "value": "{{organizationId}}" }]
+            },
+            "description": "Synchronous test delivery. Returns 502 if the target URL rejects the request."
+          }
+        },
+        {
+          "name": "Retry delivery",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/engines/loyalty/webhooks/deliveries/{{deliveryId}}/retry?organizationId={{organizationId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["engines", "loyalty", "webhooks", "deliveries", "{{deliveryId}}", "retry"],
+              "query": [{ "key": "organizationId", "value": "{{organizationId}}" }]
+            }
+          }
+        },
+        {
+          "name": "Delete webhook",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/engines/loyalty/webhooks/{{webhookId}}?organizationId={{organizationId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["engines", "loyalty", "webhooks", "{{webhookId}}"],
+              "query": [{ "key": "organizationId", "value": "{{organizationId}}" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Engines - FX",
+      "item": [
+        {
+          "name": "Convert",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{apiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fromCurrency\": \"PTS\",\n  \"toCurrency\": \"INR\",\n  \"amount\": 1000,\n  \"tenantId\": \"{{organizationId}}\",\n  \"lockRate\": false,\n  \"lockDurationMinutes\": 30\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/engines/fx/convert", "host": ["{{baseUrl}}"], "path": ["engines", "fx", "convert"] }
+          }
+        },
+        {
+          "name": "Lock rate",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{apiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currencyCode\": \"PTS\",\n  \"physicalCurrencyCode\": \"INR\",\n  \"rate\": 0.1,\n  \"lockedBy\": \"{{organizationId}}\",\n  \"lockDurationMinutes\": 60\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/engines/fx/lock-rate", "host": ["{{baseUrl}}"], "path": ["engines", "fx", "lock-rate"] }
+          }
+        },
+        {
+          "name": "Historical rates",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/engines/fx/historical-rates/PTS?physicalCurrencyCode=INR&startDate=2026-09-01&endDate=2026-09-30",
+              "host": ["{{baseUrl}}"],
+              "path": ["engines", "fx", "historical-rates", "PTS"],
+              "query": [
+                { "key": "physicalCurrencyCode", "value": "INR" },
+                { "key": "startDate", "value": "2026-09-01" },
+                { "key": "endDate", "value": "2026-09-30" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Reconciliation report",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/engines/fx/reconciliation/{{organizationId}}?startDate=2026-09-01&endDate=2026-09-30",
+              "host": ["{{baseUrl}}"],
+              "path": ["engines", "fx", "reconciliation", "{{organizationId}}"],
+              "query": [
+                { "key": "startDate", "value": "2026-09-01" },
+                { "key": "endDate", "value": "2026-09-30" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Engines - PLB",
+      "item": [
+        {
+          "name": "Create program",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{apiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organizationId\": \"{{organizationId}}\",\n  \"name\": \"Revenue Bonus\",\n  \"description\": \"Quarterly revenue based bonus\",\n  \"metricType\": \"REVENUE\",\n  \"metricKey\": \"netSales\",\n  \"cycleType\": \"MONTHLY\",\n  \"cycleStart\": \"2026-09-01\",\n  \"cycleEnd\": \"2026-09-30\",\n  \"tiers\": [\n    { \"level\": 1, \"name\": \"Silver\", \"minThreshold\": 10000, \"maxThreshold\": 50000, \"bonusType\": \"PERCENTAGE\", \"bonusValue\": 2, \"bonusCap\": 1000 }\n  ],\n  \"isActive\": true\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/engines/plb/programs", "host": ["{{baseUrl}}"], "path": ["engines", "plb", "programs"] }
+          }
+        },
+        {
+          "name": "Get programs",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": { "raw": "{{baseUrl}}/engines/plb/programs/{{organizationId}}", "host": ["{{baseUrl}}"], "path": ["engines", "plb", "programs", "{{organizationId}}"] }
+          }
+        },
+        {
+          "name": "Record metric",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{apiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organizationId\": \"{{organizationId}}\",\n  \"programId\": \"plb-123\",\n  \"customerId\": \"{{customerId}}\",\n  \"metricValue\": 15000,\n  \"periodStart\": \"2026-09-01\",\n  \"periodEnd\": \"2026-09-30\",\n  \"metadata\": {}\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/engines/plb/metrics", "host": ["{{baseUrl}}"], "path": ["engines", "plb", "metrics"] }
+          }
+        },
+        {
+          "name": "Calculate bonus",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{apiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organizationId\": \"{{organizationId}}\",\n  \"programId\": \"plb-123\",\n  \"customerId\": \"{{customerId}}\",\n  \"periodStart\": \"2026-09-01\",\n  \"periodEnd\": \"2026-09-30\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/engines/plb/calculate", "host": ["{{baseUrl}}"], "path": ["engines", "plb", "calculate"] }
+          }
+        },
+        {
+          "name": "Evaluate cycle",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{apiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organizationId\": \"{{organizationId}}\",\n  \"customerId\": \"{{customerId}}\",\n  \"periodStart\": \"2026-09-01\",\n  \"periodEnd\": \"2026-09-30\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/engines/plb/evaluate-cycle", "host": ["{{baseUrl}}"], "path": ["engines", "plb", "evaluate-cycle"] }
+          }
+        },
+        {
+          "name": "Generate statement",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{apiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"{{customerId}}\",\n  \"organizationId\": \"{{organizationId}}\",\n  \"periodStart\": \"2026-09-01\",\n  \"periodEnd\": \"2026-09-30\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/engines/plb/statement", "host": ["{{baseUrl}}"], "path": ["engines", "plb", "statement"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Engines - Value Exchange",
+      "item": [
+        {
+          "name": "Create agreement",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{apiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sourceEntityId\": \"{{organizationId}}\",\n  \"targetEntityId\": \"org-prepaid-camp\",\n  \"name\": \"Point Swap Agreement\",\n  \"sourceCurrency\": \"PTS\",\n  \"targetCurrency\": \"COINS\",\n  \"conversionRatio\": 1.5,\n  \"minAmount\": 100,\n  \"maxAmount\": 10000,\n  \"dailyCap\": 5000,\n  \"monthlyCap\": 50000,\n  \"isActive\": true,\n  \"trustModel\": \"ESCROW\",\n  \"settlementModel\": \"NET\",\n  \"breakageOwner\": \"{{organizationId}}\",\n  \"effectiveFrom\": \"2026-09-01\",\n  \"effectiveUntil\": \"2027-12-31\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/engines/value-exchange/agreements", "host": ["{{baseUrl}}"], "path": ["engines", "value-exchange", "agreements"] }
+          }
+        },
+        {
+          "name": "Get agreements",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": { "raw": "{{baseUrl}}/engines/value-exchange/agreements/{{organizationId}}", "host": ["{{baseUrl}}"], "path": ["engines", "value-exchange", "agreements", "{{organizationId}}"] }
+          }
+        },
+        {
+          "name": "Get quote",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{apiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"agreementId\": \"agr-1\",\n  \"sourceEntityId\": \"{{organizationId}}\",\n  \"sourceCustomerId\": \"{{customerId}}\",\n  \"sourceAmount\": 1000\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/engines/value-exchange/quote", "host": ["{{baseUrl}}"], "path": ["engines", "value-exchange", "quote"] }
+          }
+        },
+        {
+          "name": "Execute exchange",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{apiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quoteId\": \"q-1\",\n  \"sourceEntityId\": \"{{organizationId}}\",\n  \"sourceCustomerId\": \"{{customerId}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/engines/value-exchange/execute", "host": ["{{baseUrl}}"], "path": ["engines", "value-exchange", "execute"] }
+          }
+        },
+        {
+          "name": "Reverse exchange",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{apiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"vx-1\",\n  \"sourceEntityId\": \"{{organizationId}}\",\n  \"reason\": \"test reversal\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/engines/value-exchange/reverse", "host": ["{{baseUrl}}"], "path": ["engines", "value-exchange", "reverse"] }
+          }
+        },
+        {
+          "name": "Order history",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": { "raw": "{{baseUrl}}/engines/value-exchange/orders/{{customerId}}/{{organizationId}}", "host": ["{{baseUrl}}"], "path": ["engines", "value-exchange", "orders", "{{customerId}}", "{{organizationId}}"] }
+          }
+        }
+      ]
+    }
+  ]
+}

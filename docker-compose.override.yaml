@@ -1,0 +1,12 @@
+# Local Docker overrides: point the app at the sibling containers by service
+# name instead of the localhost values in .env (which are for native runs).
+# Auto-loaded by `docker compose up` in addition to docker-compose.yaml.
+services:
+  app:
+    environment:
+      LSB_PG_URL: postgresql://postgres:${PG_DB_PASSWORD}@postgres:5432/lsbbe_db
+      PG_DB_HOST: postgres
+      PG_DB_PORT: '5432'
+      REDIS_HOST: special-redis
+      REDIS_PORT: '6379'
+      REDIS_TLS: 'false'
