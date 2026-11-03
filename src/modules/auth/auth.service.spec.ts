@@ -61,7 +61,10 @@ describe('AuthService', () => {
       mockJwtService.sign.mockReturnValue('jwt-token-123');
       mockCacheService.set.mockResolvedValue(undefined);
 
-      const entity = { id: 'org-1', constructor: { name: 'Organization' } } as any;
+      const entity = {
+        id: 'org-1',
+        constructor: { name: 'Organization' },
+      } as any;
       const token = await service.generateJWT(entity, UserTypes.organization);
 
       expect(token).toBe('jwt-token-123');
@@ -160,6 +163,161 @@ describe('AuthService', () => {
       });
 
       expect(result).toBe(false);
+    });
+  });
+
+  describe('createOtpChallenge / consumeOtpChallenge', () => {
+    it('stores the challenge under an opaque id and rate limits per account', async () => {
+      mockCommonUtilsService.generateSessionId.mockReturnValue('challenge-1');
+      mockConfigService.get.mockImplementation((key: string) => {
+        if (key === 'ENVIRONMENT') return 'local';
+        if (key === 'OTP_TIME_OUT_MINUTES') return 10;
+        return '0000000000,0000000001';
+      });
+      mockCacheService.get.mockResolvedValue(0);
+      mockCacheService.set.mockResolvedValue(undefined);
+
+      const challengeId = await service.createOtpChallenge({
+        userType: UserTypes.organization,
+        referenceId: 'org-1',
+        phoneNumber: '9876543210',
+        countryCode: '91',
+      });
+
+      expect(challengeId).toBe('challenge-1');
+      expect(mockCacheService.set).toHaveBeenCalledWith(
+        'challenge-1',
+        '123456',
+        10 * 60 * 1000,
+      );
+      expect(mockCacheService.set).toHaveBeenCalledWith(
+        'org-1-otp-limit',
+        1,
+        15 * 60 * 1000,
+      );
+      expect(mockCacheService.set).toHaveBeenCalledWith(
+        'challenge-1-subject',
+        JSON.stringify({
+          referenceId: 'org-1',
+          userType: UserTypes.organization,
+        }),
+        10 * 60 * 1000,
+      );
+    });
+
+    it('returns the subject when the OTP is correct and burns the challenge', async () => {
+      mockCacheService.get.mockImplementation((key: string) => {
+        if (key === 'challenge-1-subject') {
+          return Promise.resolve(
+            JSON.stringify({
+              referenceId: 'org-1',
+              userType: UserTypes.organization,
+            }),
+          );
+        }
+        return Promise.resolve('123456');
+      });
+      mockCacheService.del.mockResolvedValue(undefined);
+
+      const result = await service.consumeOtpChallenge('challenge-1', '123456');
+
+      expect(result).toEqual({
+        referenceId: 'org-1',
+        userType: UserTypes.organization,
+      });
+      expect(mockCacheService.del).toHaveBeenCalledWith('challenge-1-subject');
+    });
+
+    it('returns null for an unknown challenge', async () => {
+      mockCacheService.get.mockResolvedValue(null);
+
+      await expect(
+        service.consumeOtpChallenge('unknown', '123456'),
+      ).resolves.toBeNull();
+    });
+
+    it('returns null for a wrong OTP and keeps the challenge alive', async () => {
+      mockCacheService.get.mockImplementation((key: string) => {
+        if (key === 'challenge-1-subject') {
+          return Promise.resolve(
+            JSON.stringify({
+              referenceId: 'org-1',
+              userType: UserTypes.organization,
+            }),
+          );
+        }
+        return Promise.resolve('123456');
+      });
+
+      await expect(
+        service.consumeOtpChallenge('challenge-1', '000000'),
+      ).resolves.toBeNull();
+      expect(mockCacheService.del).not.toHaveBeenCalledWith(
+        'challenge-1-subject',
+      );
+    });
+  });
+
+  describe('customer session tokens', () => {
+    it('signs a tenant scoped, audience bound token', async () => {
+      mockJwtService.sign.mockReturnValue('session-token');
+
+      const token = await service.generateCustomerSessionToken(
+        'cust-1',
+        'org-1',
+      );
+
+      expect(token).toBe('session-token');
+      expect(mockJwtService.sign).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sub: 'cust-1',
+          organizationId: 'org-1',
+          aud: 'loyalty',
+          sessionType: 'customer_session',
+        }),
+        expect.objectContaining({ expiresIn: '15m' }),
+      );
+      // A delegated session is self contained: no server side session.
+      expect(mockCacheService.set).not.toHaveBeenCalled();
+    });
+
+    it('verifies a valid customer session token', async () => {
+      mockJwtService.verifyAsync.mockResolvedValue({
+        sub: 'cust-1',
+        organizationId: 'org-1',
+        sessionType: 'customer_session',
+      });
+
+      await expect(
+        service.verifyCustomerSessionToken('session-token'),
+      ).resolves.toEqual({ sub: 'cust-1', organizationId: 'org-1' });
+      expect(mockJwtService.verifyAsync).toHaveBeenCalledWith(
+        'session-token',
+        expect.objectContaining({ audience: 'loyalty' }),
+      );
+    });
+
+    it('rejects a token without a tenant', async () => {
+      mockJwtService.verifyAsync.mockResolvedValue({
+        sub: 'cust-1',
+        sessionType: 'customer_session',
+      });
+
+      await expect(
+        service.verifyCustomerSessionToken('session-token'),
+      ).rejects.toThrow();
+    });
+
+    it('rejects a token that was not minted as a customer session', async () => {
+      mockJwtService.verifyAsync.mockResolvedValue({
+        sub: 'org-1',
+        organizationId: 'org-1',
+        sessionType: 'something_else',
+      });
+
+      await expect(
+        service.verifyCustomerSessionToken('session-token'),
+      ).rejects.toThrow();
     });
   });
 });

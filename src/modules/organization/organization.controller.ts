@@ -5,10 +5,17 @@ import {
   Param,
   Post,
   Query,
+  Req,
   UseGuards,
   UsePipes,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiSecurity } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBody,
+  ApiSecurity,
+} from '@nestjs/swagger';
 import { CallStatuses } from 'src/common/enums/status-codes';
 import {
   LoginOrganizationOtpForm,
@@ -19,13 +26,20 @@ import {
   UpdateOrganizationSchema,
   InviteShopForm,
   InviteShopSchema,
+  SetCredentialsForm,
+  SetCredentialsSchema,
+  LoginWithCredentialsForm,
+  LoginWithCredentialsSchema,
+  VerifyLoginChallengeForm,
+  VerifyLoginChallengeSchema,
 } from './DTO/organizations.dto';
 import { OrganizationResponseCodes } from './enums/responseCodes';
 import { OrganizationService } from './organization.service';
 import { OrganizationApiKeyGuard } from 'src/modules/auth/guards/organization-api-key.guard';
+import { OrganizationJwtGuard } from 'src/modules/auth/guards/organization-jwt.guard';
 import { PaginationQueryDto } from 'src/common/dto/pagination.dto';
 import { JoiValidationPipe } from 'src/common/pipes/joi-validation.pipe';
-import { withoutToken } from 'src/common/utils/redact.util';
+import { redactSecrets } from 'src/common/utils/redact.util';
 
 @ApiTags('Organization')
 @Controller('organization')
@@ -40,7 +54,14 @@ export class OrganizationController {
   @ApiBody({ type: LoginOrganizationOtpForm })
   @ApiResponse({ status: 200, description: 'OTP sent successfully.' })
   async findOrCreateOrganizationAndProceedOTPAuthentication(
-    @Body() form: { countryCode: string; phoneNumber: string; name?: string; role?: string; orgAdminId?: string },
+    @Body()
+    form: {
+      countryCode: string;
+      phoneNumber: string;
+      name?: string;
+      role?: string;
+      orgAdminId?: string;
+    },
   ) {
     const organizationId =
       await this.organizationService.findOrCreateOrganizationAndProceedPhoneAuthentication(
@@ -57,7 +78,10 @@ export class OrganizationController {
   @UsePipes(new JoiValidationPipe(ValidateOrganizationOtpSchema))
   @ApiOperation({ summary: 'Validate OTP and generate token' })
   @ApiBody({ type: ValidateOrganizationOtpForm })
-  @ApiResponse({ status: 200, description: 'OTP validated and token generated.' })
+  @ApiResponse({
+    status: 200,
+    description: 'OTP validated and token generated.',
+  })
   async validateOtpAndGenerateToken(@Body() form: { otp: string; id: string }) {
     const { metaFlags, organization } =
       await this.organizationService.validateOtpAndGenerateToken(form as any);
@@ -86,7 +110,10 @@ export class OrganizationController {
   @UseGuards(OrganizationApiKeyGuard)
   @ApiSecurity('x-api-key')
   @ApiOperation({ summary: 'Get your admin details' })
-  @ApiResponse({ status: 200, description: 'Admin details fetched successfully.' })
+  @ApiResponse({
+    status: 200,
+    description: 'Admin details fetched successfully.',
+  })
   async getYourAdmin(
     @Query('organizationId') organizationId: string,
     @Query('orgAdminId') orgAdminId: string,
@@ -98,7 +125,7 @@ export class OrganizationController {
     return {
       status: CallStatuses.Success,
       code: OrganizationResponseCodes.Fetched_Your_Admin,
-      data: withoutToken(organization),
+      data: redactSecrets(organization),
     };
   }
 
@@ -106,13 +133,18 @@ export class OrganizationController {
   @UseGuards(OrganizationApiKeyGuard)
   @ApiSecurity('x-api-key')
   @ApiOperation({ summary: 'Get organization details' })
-  @ApiResponse({ status: 200, description: 'Organization details fetched successfully.' })
+  @ApiResponse({
+    status: 200,
+    description: 'Organization details fetched successfully.',
+  })
   async getOrganization(@Query('organizationId') organizationId: string) {
     const { metaFlags, organization } =
-      await this.organizationService.getOrganizationAndMetaFlags(organizationId);
+      await this.organizationService.getOrganizationAndMetaFlags(
+        organizationId,
+      );
     return {
       status: CallStatuses.Success,
-      data: { organization: withoutToken(organization), metaFlags },
+      data: { organization: redactSecrets(organization), metaFlags },
       code: OrganizationResponseCodes.Organization_Fetched,
     };
   }
@@ -121,7 +153,10 @@ export class OrganizationController {
   @UseGuards(OrganizationApiKeyGuard)
   @ApiSecurity('x-api-key')
   @ApiOperation({ summary: 'Logout organization' })
-  @ApiResponse({ status: 200, description: 'Organization logged out successfully.' })
+  @ApiResponse({
+    status: 200,
+    description: 'Organization logged out successfully.',
+  })
   async logoutOrganization(@Body('organizationId') organizationId: string) {
     return await this.organizationService.logoutOrganization(organizationId);
   }
@@ -132,9 +167,23 @@ export class OrganizationController {
   @UsePipes(new JoiValidationPipe(UpdateOrganizationSchema))
   @ApiOperation({ summary: 'Update organization details' })
   @ApiBody({ type: UpdateOrganizationForm })
-  @ApiResponse({ status: 200, description: 'Organization updated successfully.' })
+  @ApiResponse({
+    status: 200,
+    description: 'Organization updated successfully.',
+  })
   async updateOrganization(
-    @Body() form: { organizationId: string; name?: string; address?: string; base64Logo?: string; base64Cover?: string; upiURI?: string; contactUs?: string; operationalHours?: string; aboutUs?: string },
+    @Body()
+    form: {
+      organizationId: string;
+      name?: string;
+      address?: string;
+      base64Logo?: string;
+      base64Cover?: string;
+      upiURI?: string;
+      contactUs?: string;
+      operationalHours?: string;
+      aboutUs?: string;
+    },
   ) {
     const { organizationId, ...data } = form;
     const organization =
@@ -145,7 +194,64 @@ export class OrganizationController {
     return {
       status: CallStatuses.Success,
       code: OrganizationResponseCodes.Organization_Updated,
-      data: organization,
+      data: redactSecrets(organization),
+    };
+  }
+
+  @Post('/auth/set-credentials')
+  @UseGuards(OrganizationJwtGuard)
+  @UsePipes(new JoiValidationPipe(SetCredentialsSchema))
+  @ApiOperation({ summary: 'Set the username and password for this account' })
+  @ApiBody({ type: SetCredentialsForm })
+  @ApiResponse({ status: 200, description: 'Credentials set successfully.' })
+  async setCredentials(
+    @Body() form: { username: string; password: string },
+    @Req() req: { organizationId: string },
+  ) {
+    const organization = await this.organizationService.setCredentials(
+      req.organizationId,
+      form,
+    );
+    return {
+      status: CallStatuses.Success,
+      code: OrganizationResponseCodes.Organization_Updated,
+      data: redactSecrets(organization),
+    };
+  }
+
+  @Post('/auth/login')
+  @UsePipes(new JoiValidationPipe(LoginWithCredentialsSchema))
+  @ApiOperation({
+    summary:
+      'Start a tenant staff login. Verifies the username and password, then sends an OTP to the mobile number registered for the account.',
+  })
+  @ApiBody({ type: LoginWithCredentialsForm })
+  @ApiResponse({ status: 200, description: 'OTP sent, challenge id returned.' })
+  async loginWithCredentials(
+    @Body() form: { username: string; password: string },
+  ) {
+    const result = await this.organizationService.loginWithCredentials(form);
+    return {
+      status: CallStatuses.Success,
+      code: OrganizationResponseCodes.Organization_Sent_Otp,
+      data: result,
+    };
+  }
+
+  @Post('/auth/verify-otp')
+  @UsePipes(new JoiValidationPipe(VerifyLoginChallengeSchema))
+  @ApiOperation({ summary: 'Complete a tenant staff login with the OTP' })
+  @ApiBody({ type: VerifyLoginChallengeForm })
+  @ApiResponse({ status: 200, description: 'Token generated successfully.' })
+  async verifyLoginChallenge(
+    @Body() form: { challengeId: string; otp: string },
+  ) {
+    const { token, organization } =
+      await this.organizationService.verifyLoginChallenge(form);
+    return {
+      status: CallStatuses.Success,
+      code: OrganizationResponseCodes.Organization_Verified,
+      data: { token, organization: redactSecrets(organization) },
     };
   }
 
@@ -157,7 +263,12 @@ export class OrganizationController {
   @ApiBody({ type: InviteShopForm })
   @ApiResponse({ status: 200, description: 'Shop invited successfully.' })
   async inviteShop(
-    @Body() form: { organizationId: string; phoneNumber: string; location: string },
+    @Body()
+    form: {
+      organizationId: string;
+      phoneNumber: string;
+      location: string;
+    },
   ) {
     const { organizationId, ...data } = form;
     const invResult = await this.organizationService.inviteShop(
@@ -175,9 +286,14 @@ export class OrganizationController {
   @UseGuards(OrganizationApiKeyGuard)
   @ApiSecurity('x-api-key')
   @ApiOperation({ summary: 'Get invited shops' })
-  @ApiResponse({ status: 200, description: 'Invited shops fetched successfully.' })
+  @ApiResponse({
+    status: 200,
+    description: 'Invited shops fetched successfully.',
+  })
   async getInvitedShops(@Query('organizationId') organizationId: string) {
-    const invites = await this.organizationService.getInvitedShops(organizationId);
+    const invites = await this.organizationService.getInvitedShops(
+      organizationId,
+    );
     return {
       status: CallStatuses.Success,
       code: OrganizationResponseCodes.Fetched_Shop_Invites,

@@ -66,6 +66,12 @@ export class OrganizationPrismaHelperService {
     });
   }
 
+  async findOrganizationByUsername(username: string) {
+    return await this.prismaService.organization.findFirst({
+      where: { username },
+    });
+  }
+
   async getOrganizationWithCampaignsAndMetaFlags(organizationId: string) {
     return await this.prismaService.organization.findFirstOrThrow({
       where: { id: organizationId },
@@ -120,9 +126,8 @@ export class OrganizationPrismaHelperService {
   async findMetaFlagsForOrganization(
     where: Prisma.MetaFlagsForOrganizationWhereUniqueInput,
   ): Promise<MetaFlagsForOrganization> {
-    const existing = await this.prismaService.metaFlagsForOrganization.findUnique(
-      { where },
-    );
+    const existing =
+      await this.prismaService.metaFlagsForOrganization.findUnique({ where });
     if (existing) return existing;
 
     if (!where.organizationId) {

@@ -6,13 +6,20 @@ export class LoginOrganizationOtpForm {
   @ApiProperty({ description: `Country code`, example: '91', type: String })
   countryCode: string;
 
-  @ApiProperty({ description: `Phone number`, example: '9898989898', type: String })
+  @ApiProperty({
+    description: `Phone number`,
+    example: '9898989898',
+    type: String,
+  })
   phoneNumber: string;
 
   @ApiPropertyOptional({ description: `Name`, example: 'X', type: String })
   name?: string;
 
-  @ApiPropertyOptional({ enum: OrganizationRoles, example: OrganizationRoles.ADMIN })
+  @ApiPropertyOptional({
+    enum: OrganizationRoles,
+    example: OrganizationRoles.ADMIN,
+  })
   role?: OrganizationRoles;
 
   @ApiPropertyOptional({ description: `Admin ID`, example: 'X', type: String })
@@ -44,15 +51,71 @@ export class UpdateOrganizationForm {
 }
 
 export class SendInterestForm {
-  @ApiProperty({ description: `Phone number`, example: '9899096444', type: String })
+  @ApiProperty({
+    description: `Phone number`,
+    example: '9899096444',
+    type: String,
+  })
   phoneNumber!: string;
 }
 
+export class SetCredentialsForm {
+  @ApiProperty({
+    description: `Username the staff member logs in with`,
+    example: 'jas.retail',
+    type: String,
+  })
+  username!: string;
+
+  @ApiProperty({
+    description: `Password`,
+    example: 'a-strong-password',
+    type: String,
+  })
+  password!: string;
+}
+
+export class LoginWithCredentialsForm {
+  @ApiProperty({
+    description: `Username the staff member logs in with`,
+    example: 'jas.retail',
+    type: String,
+  })
+  username!: string;
+
+  @ApiProperty({
+    description: `Password`,
+    example: 'a-strong-password',
+    type: String,
+  })
+  password!: string;
+}
+
+export class VerifyLoginChallengeForm {
+  @ApiProperty({
+    description: `Challenge id returned by the login call`,
+    example: 'm1k2j3-abcdef',
+    type: String,
+  })
+  challengeId!: string;
+
+  @ApiProperty({ description: `OTP`, example: '123456', type: String })
+  otp!: string;
+}
+
 export class InviteShopForm {
-  @ApiProperty({ description: `Phone number`, example: '9899096444', type: String })
+  @ApiProperty({
+    description: `Phone number`,
+    example: '9899096444',
+    type: String,
+  })
   phoneNumber!: string;
 
-  @ApiProperty({ description: `Shop location`, example: 'Ambala, Haryana', type: String })
+  @ApiProperty({
+    description: `Shop location`,
+    example: 'Ambala, Haryana',
+    type: String,
+  })
   location!: string;
 }
 
@@ -60,7 +123,9 @@ export const LoginOrganizationOtpSchema = Joi.object({
   countryCode: Joi.string().required(),
   phoneNumber: Joi.string().required(),
   name: Joi.string().optional(),
-  role: Joi.string().valid(...Object.values(OrganizationRoles)).optional(),
+  role: Joi.string()
+    .valid(...Object.values(OrganizationRoles))
+    .optional(),
   orgAdminId: Joi.string().optional(),
 });
 
@@ -95,3 +160,18 @@ export const InviteShopSchema = Joi.object({
   phoneNumber: Joi.string().required(),
   location: Joi.string().max(100).required(),
 }).unknown(true);
+
+export const SetCredentialsSchema = Joi.object({
+  username: Joi.string().min(3).max(64).required(),
+  password: Joi.string().min(8).max(128).required(),
+}).unknown(false);
+
+export const LoginWithCredentialsSchema = Joi.object({
+  username: Joi.string().required(),
+  password: Joi.string().required(),
+}).unknown(false);
+
+export const VerifyLoginChallengeSchema = Joi.object({
+  challengeId: Joi.string().required(),
+  otp: Joi.string().required(),
+}).unknown(false);

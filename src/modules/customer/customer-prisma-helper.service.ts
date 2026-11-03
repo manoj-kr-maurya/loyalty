@@ -12,9 +12,13 @@ export class CustomerPrismaHelperService {
 
   async findOrCreateCustomerByPhoneNumber(
     form: OtpPhoneFindOrCreateCustomerForm,
+    organizationId: string,
   ): Promise<Customer> {
     const [error, existingCustomer] = await to(
-      this.findCustomer({ phoneNumber: form.phoneNumber }),
+      this.findCustomerForOrganization({
+        organizationId,
+        phoneNumber: form.phoneNumber,
+      }),
     );
 
     if (existingCustomer && !error) {
@@ -24,6 +28,7 @@ export class CustomerPrismaHelperService {
       phoneNumber: form.phoneNumber,
       countryCode: form.countryCode,
       name: form.name,
+      organization: { connect: { id: organizationId } },
       metaFlags: {
         create: this.getDefaultMetaFlagsForCus(),
       },
@@ -32,6 +37,52 @@ export class CustomerPrismaHelperService {
       data: createCustomerPayload,
     });
     return createdCustomer;
+  }
+
+  /**
+   * Resolves the customer of a single tenant. The same phone number may
+   * exist at more than one tenant, each one a separate customer.
+   */
+  async findCustomerForOrganization({
+    organizationId,
+    phoneNumber,
+  }: {
+    organizationId: string;
+    phoneNumber: string;
+  }): Promise<Customer> {
+    return await this.prismaService.customer.findFirstOrThrow({
+      where: { organizationId, phoneNumber },
+      include: { metaFlags: true },
+    });
+  }
+
+  async findCustomerByExternalId(
+    organizationId: string,
+    externalId: string,
+  ): Promise<Customer> {
+    return await this.prismaService.customer.findFirstOrThrow({
+      where: { organizationId, externalId },
+      include: { metaFlags: true },
+    });
+  }
+
+  async createCustomerForOrganization(form: {
+    organizationId: string;
+    phoneNumber: string;
+    externalId?: string;
+    countryCode: string;
+    name?: string;
+  }): Promise<Customer> {
+    return await this.prismaService.customer.create({
+      data: {
+        organization: { connect: { id: form.organizationId } },
+        phoneNumber: form.phoneNumber,
+        countryCode: form.countryCode,
+        ...(form.externalId ? { externalId: form.externalId } : {}),
+        ...(form.name ? { name: form.name } : {}),
+        metaFlags: { create: this.getDefaultMetaFlagsForCus() },
+      },
+    });
   }
 
   /**
@@ -45,7 +96,10 @@ export class CustomerPrismaHelperService {
     organizationId: string,
   ): Promise<void> {
     if (!customerId) {
-      throw new CommonException('customerId is required', StatusCodes.BAD_REQUEST);
+      throw new CommonException(
+        'customerId is required',
+        StatusCodes.BAD_REQUEST,
+      );
     }
 
     const [order, currencies] = await Promise.all([
@@ -172,10 +226,7 @@ export class CustomerPrismaHelperService {
    * @param interval - Time interval in hours (default: 24)
    * @returns Array of customers with their total earned amount
    */
-  async getTopCustomersForLeaderBoard(
-    interval = 24,
-    organizationId?: string,
-  ) {
+  async getTopCustomersForLeaderBoard(interval = 24, organizationId?: string) {
     return this.prismaService.$queryRaw<
       Array<{
         customer_name: string;
@@ -199,7 +250,9 @@ export class CustomerPrismaHelperService {
     WHERE
       coo."createdAt" >= NOW() - (${interval} * INTERVAL '1 hour')
       AND coo.status = 'COMPLETED'
-      AND (${organizationId ?? null}::text IS NULL OR coo."organizationId" = ${organizationId ?? null})
+      AND (${organizationId ?? null}::text IS NULL OR coo."organizationId" = ${
+      organizationId ?? null
+    })
     GROUP BY
       coo."customerId", c."name", c."phoneNumber"
     ORDER BY
@@ -207,5 +260,4 @@ export class CustomerPrismaHelperService {
     LIMIT 10;
   `;
   }
-
 }

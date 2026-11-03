@@ -109,6 +109,33 @@ export class CustomerOrganizationOrderService {
     }
   }
 
+  /**
+   * A customer belongs to one tenant. A tenant may transact for its own
+   * customers, and a shop may transact for the customers of the tenant it
+   * belongs to. No tenant may transact for a customer of another tenant.
+   */
+  private async assertCustomerBelongsToOrganization(
+    customerId: string,
+    organization: { id: string; orgAdminId?: string | null },
+  ): Promise<void> {
+    const allowedOrganizationIds = [organization.id];
+    if (organization.orgAdminId) {
+      allowedOrganizationIds.push(organization.orgAdminId);
+    }
+
+    const customer = await this.prismaService.customer.findFirst({
+      where: {
+        id: customerId,
+        organizationId: { in: allowedOrganizationIds },
+      },
+      select: { id: true },
+    });
+
+    if (!customer) {
+      throw new BadRequestException('Customer not found in organization');
+    }
+  }
+
   private async performCreateCustomerOrganizationOrder(
     customerId: string,
     form: CreateCustomerOrganizationOrderDto,
@@ -134,6 +161,7 @@ export class CustomerOrganizationOrderService {
     if (!organization) {
       throw new BadRequestException('Organization not found');
     }
+    await this.assertCustomerBelongsToOrganization(customerId, organization);
     const cashAmount = form.burningAmountDetails.cash?.amount ?? 0;
     let potentialEarningFromActiveCampaigns: any[] = [];
     if (cashAmount > 0 && organization.role === OrganizationRoles.ADMIN) {
@@ -308,6 +336,7 @@ export class CustomerOrganizationOrderService {
     const customerPoints = await this.prismaService.customerWallet.findMany({
       where: {
         customerId,
+        organizationId,
         currencyCode: {
           in: coins.map((element) => element.currencyCode),
         },

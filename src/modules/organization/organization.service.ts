@@ -12,6 +12,9 @@ import {
   ValidateOrganizationOtpForm,
   SendInterestForm,
   UpdateOrganizationForm,
+  SetCredentialsForm,
+  LoginWithCredentialsForm,
+  VerifyLoginChallengeForm,
 } from './DTO/organizations.dto';
 import {
   CurrencyBucketAlreadyInitialiedForThisOrganizationException,
@@ -26,6 +29,9 @@ import { OrganizationPrismaHelperService } from './organization-prisma-helper.se
 import { ImgBBService } from 'src/modules/imgbb/imgbb.service';
 import { PaginationQueryDto } from 'src/common/dto/pagination.dto';
 import { PrismaService } from 'src/common/services/prismaService';
+import { CommonException } from 'src/common/exceptions/common.exception';
+import { StatusCodes } from 'src/common/enums/status-codes';
+import { hashPassword, verifyPassword } from 'src/common/utils/password.util';
 
 @Injectable()
 export class OrganizationService {
@@ -177,6 +183,118 @@ export class OrganizationService {
         organizationId: organization.id,
       });
     return { organization: organizationToSend, metaFlags };
+  }
+
+  /**
+   * Stores the username and password a tenant staff member will use from now
+   * on. It may only be called once per account and only by an account that is
+   * already authenticated, so credentials can never be set for someone else.
+   */
+  async setCredentials(
+    organizationId: string,
+    form: SetCredentialsForm,
+  ): Promise<Organization> {
+    const organization = await this.getOrganization(organizationId);
+
+    if (!organization) {
+      throw new CommonException(
+        'Organization not found',
+        StatusCodes.NOT_FOUND,
+      );
+    }
+
+    if (organization.passwordHash) {
+      throw new CommonException(
+        'Credentials are already set for this account',
+        StatusCodes.CONFLICT,
+      );
+    }
+
+    const [, usernameOwner] = await to(
+      this.organizationPrismaHelperService.findOrganizationByUsername(
+        form.username,
+      ),
+    );
+    if (usernameOwner) {
+      throw new CommonException(
+        'This username is already taken',
+        StatusCodes.CONFLICT,
+      );
+    }
+
+    const passwordHash = await hashPassword(form.password);
+
+    return this.organizationPrismaHelperService.updateOrganization(
+      { username: form.username, passwordHash },
+      { id: organizationId },
+    );
+  }
+
+  /**
+   * First half of the tenant staff login: the username and password are
+   * checked, then an OTP is sent to the mobile number that is already on
+   * file for that account. The OTP is never sent to a number supplied by the
+   * caller.
+   */
+  async loginWithCredentials(
+    form: LoginWithCredentialsForm,
+  ): Promise<{ challengeId: string }> {
+    const organization =
+      await this.organizationPrismaHelperService.findOrganizationByUsername(
+        form.username,
+      );
+
+    const passwordMatches = organization?.passwordHash
+      ? await verifyPassword(form.password, organization.passwordHash)
+      : false;
+
+    if (!organization || !passwordMatches) {
+      throw new CommonException(
+        'Invalid username or password',
+        StatusCodes.UNAUTHORIZED,
+      );
+    }
+
+    const challengeId = await this.authService.createOtpChallenge({
+      userType: UserTypes.organization,
+      referenceId: organization.id,
+      phoneNumber: organization.phoneNumber,
+      countryCode: organization.countryCode,
+    });
+
+    return { challengeId };
+  }
+
+  /**
+   * Second half of the tenant staff login: the OTP proves that the caller
+   * still holds the mobile number registered for the account.
+   */
+  async verifyLoginChallenge(
+    form: VerifyLoginChallengeForm,
+  ): Promise<{ token: string; organization: Organization }> {
+    const challenge = await this.authService.consumeOtpChallenge(
+      form.challengeId,
+      form.otp,
+    );
+
+    if (!challenge) {
+      throw new WrongOrganizationOtpException();
+    }
+
+    const organization = await this.getOrganization(challenge.referenceId);
+    if (!organization) {
+      throw new CommonException(
+        'Organization not found',
+        StatusCodes.NOT_FOUND,
+      );
+    }
+
+    const token = await this.authService.generateJWT(
+      organization,
+      UserTypes.organization,
+    );
+
+    return { token, organization };
   }
 
   async getParentOrganization(invite: Invite) {

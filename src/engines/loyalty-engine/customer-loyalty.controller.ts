@@ -1,6 +1,6 @@
-import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, Query, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { CustomerJwtGuard } from 'src/modules/auth/guards/customer-jwt.guard';
+import { CustomerSessionGuard } from 'src/modules/auth/guards/customer-session.guard';
 import { CurrentCustomer } from 'src/modules/auth/decorators/current-customer.decorator';
 import { CommonException } from 'src/common/exceptions/common.exception';
 import { StatusCodes } from 'src/common/enums/status-codes';
@@ -9,12 +9,13 @@ import { LedgerQueryService } from './services/ledger-query.service';
 import { LedgerQueryDto } from './dto/ledger-query.dto';
 
 /**
- * Customer-facing read endpoints. Authenticated with a customer JWT; the
- * customer id always comes from the token, never from the request.
+ * Customer-facing read endpoints. Authenticated with a tenant delegated
+ * customer session; the customer id and the tenant always come from the
+ * token, never from the request.
  */
 @ApiTags('engines-loyalty-customer')
 @ApiBearerAuth()
-@UseGuards(CustomerJwtGuard)
+@UseGuards(CustomerSessionGuard)
 @Controller('engines/loyalty/customer')
 export class CustomerLoyaltyController {
   constructor(
@@ -26,24 +27,33 @@ export class CustomerLoyaltyController {
   @ApiOperation({ summary: "List the authenticated customer's loyalty ledger" })
   async getMyLedger(
     @CurrentCustomer() customerId: string,
+    @Req() req: { organizationId: string },
     @Query() query: LedgerQueryDto,
   ) {
-    if (!query.organizationId) {
+    if (query.organizationId && query.organizationId !== req.organizationId) {
       throw new CommonException(
-        'organizationId is required',
-        StatusCodes.BAD_REQUEST,
+        'organizationId does not match the session',
+        StatusCodes.FORBIDDEN,
       );
     }
 
-    return this.ledgerQuery.list(customerId, query.organizationId, query);
+    return this.ledgerQuery.list(customerId, req.organizationId, query);
   }
 
   @Get('tier-status/:organizationId')
   @ApiOperation({ summary: "Get the authenticated customer's tier status" })
   async getMyTierStatus(
     @CurrentCustomer() customerId: string,
+    @Req() req: { organizationId: string },
     @Param('organizationId') organizationId: string,
   ) {
-    return this.loyaltyEngine.getCustomerTier(customerId, organizationId);
+    if (organizationId !== req.organizationId) {
+      throw new CommonException(
+        'organizationId does not match the session',
+        StatusCodes.FORBIDDEN,
+      );
+    }
+
+    return this.loyaltyEngine.getCustomerTier(customerId, req.organizationId);
   }
 }

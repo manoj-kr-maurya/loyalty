@@ -18,6 +18,8 @@ import {
   Cacheable,
   InvalidateCache,
 } from 'src/common/decorators/cache.decorator';
+import { CUSTOMER_SESSION_TOKEN_TTL } from '../auth/auth.service';
+import to from 'await-to-js';
 
 @Injectable()
 export class CustomerService {
@@ -35,9 +37,9 @@ export class CustomerService {
     private readonly prisma: PrismaService,
   ) {}
 
-  async getMyProfile(customerId: string) {
-    const customer = await this.prisma.customer.findUnique({
-      where: { id: customerId },
+  async getMyProfile(customerId: string, organizationId: string) {
+    const customer = await this.prisma.customer.findFirst({
+      where: { id: customerId, organizationId },
       include: { metaFlags: true },
     });
 
@@ -48,29 +50,39 @@ export class CustomerService {
     return customer;
   }
 
-  async updateMyProfile(customerId: string, form: { name?: string }) {
+  async updateMyProfile(
+    customerId: string,
+    organizationId: string,
+    form: { name?: string },
+  ) {
     return this.prisma.customer.update({
-      where: { id: customerId },
+      where: { id: customerId, organizationId },
       data: {
         ...(form.name !== undefined && { name: form.name }),
       },
     });
   }
 
-  async getMyWallets(customerId: string) {
+  async getMyWallets(customerId: string, organizationId: string) {
     return this.prisma.customerWallet.findMany({
-      where: { customerId },
-      orderBy: [{ organizationId: 'asc' }, { currencyCode: 'asc' }],
+      where: { customerId, organizationId },
+      orderBy: [{ currencyCode: 'asc' }],
     });
   }
 
-  async getMyOrders(customerId: string, page = 1, limit = 20) {
+  async getMyOrders(
+    customerId: string,
+    organizationId: string,
+    page = 1,
+    limit = 20,
+  ) {
     const take = Math.min(Math.max(limit, 1), 100);
     const skip = (Math.max(page, 1) - 1) * take;
+    const where = { customerId, organizationId };
 
     const [items, total] = await Promise.all([
       this.prisma.customerOrganizationOrder.findMany({
-        where: { customerId },
+        where,
         include: {
           customerEarningAmountDetail: { include: { coin: true } },
           customerBurningAmountDetail: {
@@ -82,7 +94,7 @@ export class CustomerService {
         skip,
         take,
       }),
-      this.prisma.customerOrganizationOrder.count({ where: { customerId } }),
+      this.prisma.customerOrganizationOrder.count({ where }),
     ]);
 
     return {
@@ -127,12 +139,85 @@ export class CustomerService {
     return { wallet, entries };
   }
 
+  /**
+   * Creates a delegated session for a customer the tenant has already
+   * authenticated. The tenant identifies the customer with its own external
+   * id or by phone number; the engine resolves the tenant scoped customer
+   * and hands back a short lived token that is bound to that tenant.
+   */
+  async createCustomerSession(
+    organizationId: string,
+    form: {
+      externalId?: string;
+      phoneNumber?: string;
+      countryCode?: string;
+      name?: string;
+    },
+  ) {
+    let customer: Customer | null = null;
+
+    if (form.externalId) {
+      const [error, existing] = await to(
+        this.customerPrismaHelperService.findCustomerByExternalId(
+          organizationId,
+          form.externalId,
+        ),
+      );
+      if (!error && existing) {
+        customer = existing;
+      }
+    }
+
+    if (!customer && form.phoneNumber) {
+      const [error, existing] = await to(
+        this.customerPrismaHelperService.findCustomerForOrganization({
+          organizationId,
+          phoneNumber: form.phoneNumber,
+        }),
+      );
+      if (!error && existing) {
+        customer = existing;
+      }
+    }
+
+    if (!customer) {
+      if (!form.phoneNumber) {
+        throw new CommonException(
+          'phoneNumber is required to create a customer for this organization',
+          StatusCodes.BAD_REQUEST,
+        );
+      }
+
+      customer =
+        await this.customerPrismaHelperService.createCustomerForOrganization({
+          organizationId,
+          phoneNumber: form.phoneNumber,
+          externalId: form.externalId,
+          countryCode: form.countryCode || '91',
+          name: form.name,
+        });
+    }
+
+    const token = await this.authService.generateCustomerSessionToken(
+      customer.id,
+      organizationId,
+    );
+
+    return {
+      token,
+      expiresIn: CUSTOMER_SESSION_TOKEN_TTL,
+      customer: { ...customer, token: '' },
+    };
+  }
+
   async findOrCreateCustomersAndProceedPhoneAuthentication(
     form: OtpPhoneFindOrCreateCustomerForm,
+    organizationId: string,
   ) {
     const customer =
       await this.customerPrismaHelperService.findOrCreateCustomerByPhoneNumber(
         form,
+        organizationId,
       );
 
     await this.authService.sendLoginOtp({

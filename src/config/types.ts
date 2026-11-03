@@ -27,6 +27,7 @@ export interface MailerVariables {
 
 export interface OTPVariables {
   [envEnums.OTP_TIME_OUT_MINUTES]: number;
+  [envEnums.CUSTOMER_OTP_ENABLED]: boolean;
 }
 
 export interface ExternalServiceBaseUrlsVariables {

@@ -14,17 +14,49 @@ The Organization Module manages the core business entities in the JAS Loyalty En
 
 | # | Method | Endpoint | Auth | Description |
 |---|--------|----------|------|-------------|
-| 1 | `POST` | `/organization/otp/phone` | ❌ Public | Send OTP to phone number |
+| 1 | `POST` | `/organization/otp/phone` | ❌ Public | Send OTP to phone number (first time setup) |
 | 2 | `POST` | `/organization/otp/validate` | ❌ Public | Validate OTP & get JWT |
-| 3 | `GET` | `/organization/get-your-admin` | ✅ JWT | Get admin org by orgAdminId |
-| 4 | `GET` | `/organization/` | ✅ JWT | Get authenticated org details |
-| 5 | `POST` | `/organization/logout` | ✅ JWT | Logout (invalidate session) |
-| 6 | `POST` | `/organization/update` | ✅ JWT | Update organization profile |
-| 7 | `POST` | `/organization/send-interest` | ❌ Public | Register interest |
-| 8 | `POST` | `/organization/invite-shop` | ✅ JWT | Invite a shop manager |
-| 9 | `GET` | `/organization/invited-shops` | ✅ JWT | List invited shops |
-| 10 | `GET` | `/organization/leader-board/top-organizations` | ✅ JWT | Paginated leaderboard |
-| 11 | `GET` | `/organization/leader-board/organization/detail/:orgAdminId` | ✅ JWT | Leaderboard org detail |
+| 3 | `POST` | `/organization/auth/set-credentials` | ✅ JWT | Set username + password (once per account) |
+| 4 | `POST` | `/organization/auth/login` | ❌ Public | Verify username + password, send OTP to the mobile on file |
+| 5 | `POST` | `/organization/auth/verify-otp` | ❌ Public | Verify the OTP & get JWT |
+| 6 | `GET` | `/organization/get-your-admin` | ✅ JWT | Get admin org by orgAdminId |
+| 7 | `GET` | `/organization/` | ✅ JWT | Get authenticated org details |
+| 8 | `POST` | `/organization/logout` | ✅ JWT | Logout (invalidate session) |
+| 9 | `POST` | `/organization/update` | ✅ JWT | Update organization profile |
+| 10 | `POST` | `/organization/send-interest` | ❌ Public | Register interest |
+| 11 | `POST` | `/organization/invite-shop` | ✅ JWT | Invite a shop manager |
+| 12 | `GET` | `/organization/invited-shops` | ✅ JWT | List invited shops |
+| 13 | `GET` | `/organization/leader-board/top-organizations` | ✅ JWT | Paginated leaderboard |
+| 14 | `GET` | `/organization/leader-board/organization/detail/:orgAdminId` | ✅ JWT | Leaderboard org detail |
+
+---
+
+## Tenant staff login
+
+Staff of a tenant log in with a **username and password**, and then prove they
+still hold the **mobile number already registered for that account** with an
+OTP. The engine never sends an OTP to a number supplied by the caller.
+
+```
+First time (setup)                       Every time after
+───────────────────                      ─────────────────
+POST /organization/otp/phone             POST /organization/auth/login
+POST /organization/otp/validate            { username, password }
+  → { token }                             → { challengeId }   (OTP sent to the mobile on file)
+POST /organization/auth/set-credentials   POST /organization/auth/verify-otp
+  { username, password }                    { challengeId, otp }
+  (bearer JWT, once only)                  → { token, organization }
+```
+
+- The password is hashed with **scrypt** and a per password random salt. The
+  hash carries its own cost parameters, so the cost can be raised later without
+  invalidating existing hashes.
+- `username` is unique across the platform; `passwordHash` lives on the
+  `organization` row.
+- Credentials can only be set **once** per account, and only by an account that
+  is already authenticated.
+- The `challengeId` is opaque and single use. The OTP is rate limited per
+  account (5 requests / 15 minutes).
 
 ---
 

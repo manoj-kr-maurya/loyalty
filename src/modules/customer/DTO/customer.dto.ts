@@ -14,6 +14,38 @@ export class OtpPhoneFindOrCreateCustomerForm {
 
   @ApiPropertyOptional({ description: `Name`, example: 'Y', type: String })
   name?: string;
+
+  @ApiPropertyOptional({
+    description: `Organization the customer belongs to`,
+    type: String,
+  })
+  organizationId?: string;
+}
+
+export class CustomerSessionForm {
+  @ApiPropertyOptional({
+    description: `Identifier the tenant uses for this customer`,
+    example: 'cust_12345',
+    type: String,
+  })
+  externalId?: string;
+
+  @ApiPropertyOptional({
+    description: `Phone number of the customer`,
+    example: '9898989898',
+    type: String,
+  })
+  phoneNumber?: string;
+
+  @ApiPropertyOptional({
+    description: `Country code`,
+    example: '91',
+    type: String,
+  })
+  countryCode?: string;
+
+  @ApiPropertyOptional({ description: `Name`, example: 'Y', type: String })
+  name?: string;
 }
 
 export class OtpValidateOtpBodyForm {
@@ -43,7 +75,17 @@ export const OtpPhoneFindOrCreateSchema = Joi.object({
   countryCode: Joi.string().required(),
   phoneNumber: Joi.string().required(),
   name: Joi.string().optional(),
+  organizationId: Joi.string().optional(),
 });
+
+export const CustomerSessionSchema = Joi.object({
+  externalId: Joi.string().optional(),
+  phoneNumber: Joi.string().optional(),
+  countryCode: Joi.string().optional(),
+  name: Joi.string().optional(),
+})
+  .or('externalId', 'phoneNumber')
+  .unknown(false);
 
 export const OtpValidateOtpSchema = Joi.object({
   id: Joi.string().required(),
@@ -61,7 +103,6 @@ export const UpdateMyProfileSchema = Joi.object({
 }).unknown(false);
 
 export const MyStatementQuerySchema = Joi.object({
-  organizationId: Joi.string().required(),
   currencyCode: Joi.string().required(),
 }).unknown(true);
 

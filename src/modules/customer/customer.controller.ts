@@ -18,30 +18,31 @@ import {
   LogoutCustomerSchema,
   UpdateMyProfileSchema,
   MyStatementQuerySchema,
+  CustomerSessionSchema,
 } from './DTO/customer.dto';
 import { CustomerService } from './customer.service';
 import { CustomerResponseCodes } from './enums/responseCodes';
 import { ApiSecurity, ApiTags } from '@nestjs/swagger';
 import { OrganizationApiKeyGuard } from 'src/modules/auth/guards/organization-api-key.guard';
-import { CustomerJwtGuard } from 'src/modules/auth/guards/customer-jwt.guard';
+import { CustomerSessionGuard } from 'src/modules/auth/guards/customer-session.guard';
 import { JoiValidationPipe } from 'src/common/pipes/joi-validation.pipe';
 import { CurrentAuth } from 'src/modules/auth/decorators/current-auth.decorator';
 import { OrganizationAuthContext } from 'src/modules/auth/api-key.service';
 import { resolveOrganizationId } from 'src/modules/auth/resolve-organization-id';
 import { CommonException } from 'src/common/exceptions/common.exception';
 import { StatusCodes } from 'src/common/enums/status-codes';
-
-function withoutToken<T>(entity: T): T {
-  if (!entity || typeof entity !== 'object') return entity;
-  const { token: _token, ...safe } = entity as Record<string, unknown>;
-  return safe as T;
-}
+import { ConfigService } from '@nestjs/config';
+import { envEnums } from 'src/config/enums';
+import { redactSecrets } from 'src/common/utils/redact.util';
 
 @ApiTags('Customer')
 @ApiSecurity('x-api-key')
 @Controller('customer')
 export class CustomerController {
-  constructor(private readonly customerService: CustomerService) {}
+  constructor(
+    private readonly customerService: CustomerService,
+    private readonly configService: ConfigService,
+  ) {}
 
   @Get(`/`)
   @UseGuards(OrganizationApiKeyGuard)
@@ -70,53 +71,64 @@ export class CustomerController {
       code: CustomerResponseCodes.Customer_Found,
       data:
         data && 'customer' in data
-          ? { ...data, customer: withoutToken(data.customer) }
-          : withoutToken(data),
+          ? { ...data, customer: redactSecrets(data.customer) }
+          : redactSecrets(data),
     };
   }
 
   @Get('/me')
-  @UseGuards(CustomerJwtGuard)
-  async getMyProfile(@Req() req: { customerId: string }) {
-    const customer = await this.customerService.getMyProfile(req.customerId);
+  @UseGuards(CustomerSessionGuard)
+  async getMyProfile(
+    @Req() req: { customerId: string; organizationId: string },
+  ) {
+    const customer = await this.customerService.getMyProfile(
+      req.customerId,
+      req.organizationId,
+    );
     return {
       status: CallStatuses.Success,
       code: CustomerResponseCodes.Customer_Found,
-      data: withoutToken(customer),
+      data: redactSecrets(customer),
     };
   }
 
   @Post('/me')
-  @UseGuards(CustomerJwtGuard)
+  @UseGuards(CustomerSessionGuard)
   @UsePipes(new JoiValidationPipe(UpdateMyProfileSchema))
   async updateMyProfile(
     @Body() body: { name?: string },
-    @Req() req: { customerId: string },
+    @Req() req: { customerId: string; organizationId: string },
   ) {
     const customer = await this.customerService.updateMyProfile(
       req.customerId,
+      req.organizationId,
       body,
     );
     return {
       status: CallStatuses.Success,
       code: CustomerResponseCodes.Customer_Updated,
-      data: withoutToken(customer),
+      data: redactSecrets(customer),
     };
   }
 
   @Get('/me/wallets')
-  @UseGuards(CustomerJwtGuard)
-  async getMyWallets(@Req() req: { customerId: string }) {
+  @UseGuards(CustomerSessionGuard)
+  async getMyWallets(
+    @Req() req: { customerId: string; organizationId: string },
+  ) {
     return {
       status: CallStatuses.Success,
-      data: await this.customerService.getMyWallets(req.customerId),
+      data: await this.customerService.getMyWallets(
+        req.customerId,
+        req.organizationId,
+      ),
     };
   }
 
   @Get('/me/orders')
-  @UseGuards(CustomerJwtGuard)
+  @UseGuards(CustomerSessionGuard)
   async getMyOrders(
-    @Req() req: { customerId: string },
+    @Req() req: { customerId: string; organizationId: string },
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
@@ -124,6 +136,7 @@ export class CustomerController {
       status: CallStatuses.Success,
       data: await this.customerService.getMyOrders(
         req.customerId,
+        req.organizationId,
         Number(page) || 1,
         Number(limit) || 20,
       ),
@@ -131,19 +144,18 @@ export class CustomerController {
   }
 
   @Get('/me/statement')
-  @UseGuards(CustomerJwtGuard)
-  @UsePipes(new JoiValidationPipe(MyStatementQuerySchema))
+  @UseGuards(CustomerSessionGuard)
   async getMyStatement(
-    @Req() req: { customerId: string },
-    @Query('organizationId') organizationId: string,
-    @Query('currencyCode') currencyCode: string,
+    @Req() req: { customerId: string; organizationId: string },
+    @Query(new JoiValidationPipe(MyStatementQuerySchema, 'query'))
+    query: { currencyCode: string },
   ) {
     return {
       status: CallStatuses.Success,
       data: await this.customerService.getMyStatement(
         req.customerId,
-        organizationId,
-        currencyCode,
+        req.organizationId,
+        query.currencyCode,
       ),
     };
   }
@@ -163,22 +175,69 @@ export class CustomerController {
     return {
       status: CallStatuses.Success,
       code: CustomerResponseCodes.Customer_Found,
-      data: withoutToken(customer),
+      data: redactSecrets(customer),
+    };
+  }
+
+  /**
+   * Exchanges a tenant's assertion of a shopper identity for a short lived,
+   * tenant scoped session token. The tenant authenticates the shopper in its
+   * own product; this engine never asks a shopper for an OTP.
+   */
+  @Post('/session')
+  @UseGuards(OrganizationApiKeyGuard)
+  @UsePipes(new JoiValidationPipe(CustomerSessionSchema))
+  async createCustomerSession(
+    @Body()
+    form: {
+      externalId?: string;
+      phoneNumber?: string;
+      countryCode?: string;
+      name?: string;
+    },
+    @Query('organizationId') organizationId: string,
+    @CurrentAuth() auth: OrganizationAuthContext,
+  ) {
+    const effectiveOrganizationId = resolveOrganizationId(auth, organizationId);
+    const session = await this.customerService.createCustomerSession(
+      effectiveOrganizationId,
+      form,
+    );
+    return {
+      status: CallStatuses.Success,
+      code: CustomerResponseCodes.Customer_Found,
+      data: session,
     };
   }
 
   @Post('/otp/phone')
   @UsePipes(new JoiValidationPipe(OtpPhoneFindOrCreateSchema))
   async findOrCreateCustomersAndProceedOTPAuthentication(
-    @Body() form: { countryCode: string; phoneNumber: string; name?: string },
+    @Body()
+    form: {
+      countryCode: string;
+      phoneNumber: string;
+      name?: string;
+      organizationId?: string;
+    },
   ): Promise<{
     status: CallStatuses;
     code: CustomerResponseCodes;
     data: string;
   }> {
+    this.assertShopperOtpIsEnabled();
+
+    if (!form.organizationId) {
+      throw new CommonException(
+        'organizationId is required',
+        StatusCodes.BAD_REQUEST,
+      );
+    }
+
     const customerId =
       await this.customerService.findOrCreateCustomersAndProceedPhoneAuthentication(
         form as any,
+        form.organizationId,
       );
     return {
       status: CallStatuses.Success,
@@ -196,6 +255,8 @@ export class CustomerController {
     status: CallStatuses;
     message: string;
   }> {
+    this.assertShopperOtpIsEnabled();
+
     const { token, customer } =
       await this.customerService.validateOtpAndGenerateToken(form as any);
     return {
@@ -205,17 +266,29 @@ export class CustomerController {
     };
   }
 
+  private assertShopperOtpIsEnabled() {
+    const isEnabled = this.configService.get<boolean>(
+      envEnums.CUSTOMER_OTP_ENABLED,
+    );
+    if (!isEnabled) {
+      throw new CommonException(
+        'Shopper OTP authentication is disabled. Use POST /customer/session to obtain a customer session.',
+        StatusCodes.GONE,
+      );
+    }
+  }
+
   @Post(`/logout`)
   @UseGuards(OrganizationApiKeyGuard)
-  @UsePipes(new JoiValidationPipe(LogoutCustomerSchema))
   async logoutCustomer(
-    @Body('customerId') customerId: string,
+    @Body(new JoiValidationPipe(LogoutCustomerSchema))
+    form: { customerId: string },
     @Query('organizationId') organizationId: string,
     @CurrentAuth() auth: OrganizationAuthContext,
   ) {
     const effectiveOrganizationId = resolveOrganizationId(auth, organizationId);
     return await this.customerService.logoutCustomerForOrganization(
-      customerId,
+      form.customerId,
       effectiveOrganizationId,
     );
   }
@@ -238,7 +311,7 @@ export class CustomerController {
     return {
       status: CallStatuses.Success,
       code: CustomerResponseCodes.Customer_Updated,
-      data: withoutToken(customer),
+      data: redactSecrets(customer),
     };
   }
 

@@ -17,6 +17,9 @@ describe('CustomerService', () => {
     findCustomerWithoutNestedData: jest.fn(),
     findCustomer: jest.fn(),
     updateCustomer: jest.fn(),
+    findCustomerForOrganization: jest.fn(),
+    findCustomerByExternalId: jest.fn(),
+    createCustomerForOrganization: jest.fn(),
   };
 
   const mockCacheService = {
@@ -25,9 +28,14 @@ describe('CustomerService', () => {
     invalidateCacheByPattern: jest.fn(),
   };
 
+  const mockAuthService = {
+    generateCustomerSessionToken: jest.fn(),
+  };
+
   const mockPrismaService = {
     customer: {
       findUnique: jest.fn(),
+      findFirst: jest.fn(),
       update: jest.fn(),
     },
     customerWallet: {
@@ -51,7 +59,7 @@ describe('CustomerService', () => {
           provide: CustomerPrismaHelperService,
           useValue: mockPrismaHelperService,
         },
-        { provide: AuthService, useValue: {} },
+        { provide: AuthService, useValue: mockAuthService },
         { provide: CacheService, useValue: mockCacheService },
         { provide: ImgBBService, useValue: {} },
         { provide: PrismaService, useValue: mockPrismaService },
@@ -117,6 +125,115 @@ describe('CustomerService', () => {
       ).rejects.toBeInstanceOf(CommonException);
       expect(
         mockPrismaHelperService.findCustomerWithWalletBalances,
+      ).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('tenant scoped reads', () => {
+    it('scopes the profile lookup to the session organization', async () => {
+      mockPrismaService.customer.findFirst.mockResolvedValue({
+        id: 'cust-1',
+        name: 'John',
+      });
+
+      await service.getMyProfile('cust-1', 'org-a');
+
+      expect(mockPrismaService.customer.findFirst).toHaveBeenCalledWith({
+        where: { id: 'cust-1', organizationId: 'org-a' },
+        include: { metaFlags: true },
+      });
+    });
+
+    it('scopes the wallet lookup to the session organization', async () => {
+      mockPrismaService.customerWallet.findMany.mockResolvedValue([]);
+
+      await service.getMyWallets('cust-1', 'org-a');
+
+      expect(mockPrismaService.customerWallet.findMany).toHaveBeenCalledWith({
+        where: { customerId: 'cust-1', organizationId: 'org-a' },
+        orderBy: [{ currencyCode: 'asc' }],
+      });
+    });
+
+    it('scopes the order lookup to the session organization', async () => {
+      mockPrismaService.customerOrganizationOrder.findMany.mockResolvedValue(
+        [],
+      );
+      mockPrismaService.customerOrganizationOrder.count.mockResolvedValue(0);
+
+      await service.getMyOrders('cust-1', 'org-a', 1, 20);
+
+      expect(
+        mockPrismaService.customerOrganizationOrder.count,
+      ).toHaveBeenCalledWith({
+        where: { customerId: 'cust-1', organizationId: 'org-a' },
+      });
+    });
+  });
+
+  describe('createCustomerSession', () => {
+    it('resolves an existing customer by the tenant external id', async () => {
+      mockPrismaHelperService.findCustomerByExternalId.mockResolvedValue({
+        id: 'cust-1',
+        name: 'John',
+        token: 'stale-token',
+      });
+      mockAuthService.generateCustomerSessionToken.mockResolvedValue(
+        'session-token',
+      );
+
+      const result = await service.createCustomerSession('org-a', {
+        externalId: 'ext-1',
+      });
+
+      expect(
+        mockPrismaHelperService.findCustomerByExternalId,
+      ).toHaveBeenCalledWith('org-a', 'ext-1');
+      expect(mockAuthService.generateCustomerSessionToken).toHaveBeenCalledWith(
+        'cust-1',
+        'org-a',
+      );
+      expect(result.token).toBe('session-token');
+      expect(result.customer.token).toBe('');
+    });
+
+    it('creates a tenant scoped customer when the shopper is unknown', async () => {
+      mockPrismaHelperService.findCustomerForOrganization.mockRejectedValue(
+        new Error('not found'),
+      );
+      mockPrismaHelperService.createCustomerForOrganization.mockResolvedValue({
+        id: 'cust-new',
+      });
+      mockAuthService.generateCustomerSessionToken.mockResolvedValue(
+        'session-token',
+      );
+
+      const result = await service.createCustomerSession('org-a', {
+        phoneNumber: '9898989898',
+        name: 'John',
+      });
+
+      expect(
+        mockPrismaHelperService.createCustomerForOrganization,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          organizationId: 'org-a',
+          phoneNumber: '9898989898',
+        }),
+      );
+      expect(result.customer.id).toBe('cust-new');
+    });
+
+    it('refuses to create a customer without a phone number', async () => {
+      mockPrismaHelperService.findCustomerByExternalId.mockRejectedValue(
+        new Error('not found'),
+      );
+
+      await expect(
+        service.createCustomerSession('org-a', { externalId: 'ext-1' }),
+      ).rejects.toBeInstanceOf(CommonException);
+      expect(
+        mockPrismaHelperService.createCustomerForOrganization,
       ).not.toHaveBeenCalled();
     });
   });

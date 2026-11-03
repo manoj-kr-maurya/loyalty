@@ -11,7 +11,12 @@ import {
 import { AdminService } from './admin.service';
 import { CallStatuses } from 'src/common/enums/status-codes';
 
-import { ApiTags, ApiResponse, ApiOperation, ApiSecurity } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiResponse,
+  ApiOperation,
+  ApiSecurity,
+} from '@nestjs/swagger';
 import {
   PaginationQueryDto,
   PaginatedResponse,
@@ -24,7 +29,7 @@ import {
 import { InviteAdminForm } from './DTO/admin.dto';
 import { AdminResponseCodes } from './enums/responseCodes';
 import { PlatformAdminGuard } from 'src/modules/auth/guards/platform-admin.guard';
-import { withoutToken } from 'src/common/utils/redact.util';
+import { redactSecrets } from 'src/common/utils/redact.util';
 
 @ApiTags('Admin')
 @ApiSecurity('x-api-key')
@@ -79,7 +84,7 @@ export class AdminController {
     const organization = await this.adminService.fetchOrganizationById(id);
     return {
       status: CallStatuses.Success,
-      data: withoutToken(organization),
+      data: redactSecrets(organization),
     };
   }
 
@@ -88,7 +93,7 @@ export class AdminController {
     const customer = await this.adminService.fetchCustomerById(id);
     return {
       status: CallStatuses.Success,
-      data: withoutToken(customer),
+      data: redactSecrets(customer),
     };
   }
 

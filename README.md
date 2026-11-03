@@ -107,6 +107,9 @@ CAMPAIGN_REMINDER_DAYS=
 OTP_TIME_OUT_MINUTES=
 MINIMUM_CAMPAIGN_AMOUNT_IN_INR=
 COMMA_SEPARATED_TESTING_PHONE_NUMBERS=
+# Shopper OTP login is deprecated. Tenants authenticate their own shoppers and
+# exchange that assertion for a customer session at POST /customer/session.
+CUSTOMER_OTP_ENABLED=false
 ```
 
 ### Running with Docker
