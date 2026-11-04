@@ -103,7 +103,9 @@ export class JobSchedulerService implements OnModuleInit {
       const connectionString = this.configService.get<string>(
         envEnums.LSB_PG_URL,
       );
-      this.boss = new PgBoss({ connectionString });
+      // Keep the pool small: Supabase's session pooler caps concurrent clients
+      // and a rolling deploy briefly runs two instances at the same time.
+      this.boss = new PgBoss({ connectionString, max: 3 });
       await this.boss.start();
       this.logger.log(
         'JobScheduler (pg-boss over PostgreSQL) started successfully',

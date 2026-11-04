@@ -115,6 +115,11 @@ COMMA_SEPARATED_TESTING_PHONE_NUMBERS=
 CUSTOMER_OTP_ENABLED=false
 ```
 
+> **Connection pooling (Supabase):** the session pooler caps concurrent clients.
+> The Prisma pool is capped automatically at `connection_limit=5` (see
+> `PrismaService`) and pg-boss at `max: 3` (`JobSchedulerService`). Override the
+> Prisma cap by adding `?connection_limit=<n>` to `LSB_PG_URL`.
+
 ### Running with Docker
 
 1. Clone the repository
