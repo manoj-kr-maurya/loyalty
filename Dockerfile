@@ -22,7 +22,11 @@ COPY . .
 # Generate Prisma client
 RUN npm run db
 
+# Compile TypeScript during the image build, not at container start.
+# Building inside the 512Mi runtime container OOMs before the server binds a port.
+RUN npm run build
+
 # Use wait-for-it script to wait for dependencies before starting
 # Note: PostgreSQL is hosted on Supabase (cloud), so we don't wait for a local postgres container.
 # If you have other services to wait for (e.g., Redis), add them here.
-CMD ["/bin/sh", "-c", "npm run migrate-deploy && npm run build && npm start"]
+CMD ["/bin/sh", "-c", "npm run migrate-deploy && npm start"]
