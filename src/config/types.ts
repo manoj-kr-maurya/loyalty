@@ -14,7 +14,10 @@ export interface IdentityJWTEnvVariables {
 }
 
 export interface RedisVariables {
-  [envEnums.REDIS_PASSWORD]: string;
+  // Full connection string (redis:// or rediss://). When set it takes
+  // precedence over the discrete REDIS_HOST/PORT/PASSWORD/TLS fields.
+  [envEnums.REDIS_URL]?: string;
+  [envEnums.REDIS_PASSWORD]?: string;
   [envEnums.REDIS_HOST]: string;
   [envEnums.REDIS_PORT]: number;
   [envEnums.REDIS_TLS]: boolean;

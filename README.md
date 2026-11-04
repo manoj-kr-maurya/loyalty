@@ -75,10 +75,13 @@ PORT=
 ENVIRONMENT=
 JWT_SECRET=
 
-# Redis
-REDIS_PASSWORD=
-REDIS_HOST=
-REDIS_PORT=
+# Redis — set REDIS_URL (redis:// or rediss://), which takes precedence,
+# or the discrete fields below
+REDIS_URL=
+# REDIS_HOST=
+# REDIS_PORT=
+# REDIS_PASSWORD=
+# REDIS_TLS=
 
 # Email
 SENDER_MAIL=

@@ -1160,9 +1160,10 @@ Customer
 # Database
 LSB_PG_URL=postgresql://user:password@host:5432/db
 
-# Redis
-REDIS_HOST=localhost
-REDIS_PORT=6379
+# Redis (REDIS_URL takes precedence over the discrete fields)
+REDIS_URL=rediss://default:password@host:6379
+# REDIS_HOST=localhost
+# REDIS_PORT=6379
 
 # Authentication
 JWT_SECRET=your-secret-key

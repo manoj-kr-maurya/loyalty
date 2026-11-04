@@ -62,6 +62,26 @@ describe('envSchema', () => {
     });
   });
 
+  it('accepts a REDIS_URL without REDIS_PASSWORD', () => {
+    const { error, value } = envSchema.validate({
+      ...requiredConfig,
+      REDIS_PASSWORD: undefined,
+      REDIS_URL: 'rediss://default:secret@redis.example.com:6379',
+    } as any);
+
+    expect(error).toBeNull();
+    expect(value).toMatchObject({
+      REDIS_URL: 'rediss://default:secret@redis.example.com:6379',
+    });
+  });
+
+  it('leaves REDIS_URL unset when it is not provided', () => {
+    const { error, value } = validate();
+
+    expect(error).toBeNull();
+    expect(value.REDIS_URL).toBeUndefined();
+  });
+
   it('treats any value other than "true" or "1" as false', () => {
     const { error, value } = validate({ CUSTOMER_OTP_ENABLED: 'no' });
 

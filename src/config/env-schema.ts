@@ -76,6 +76,12 @@ class CustomJOI {
         return { error: new Error(`${key} is required`), value: null };
       }
 
+      // Optional variable that was not provided: leave it unset instead of
+      // failing the type check below.
+      if (value === undefined || value === null) {
+        continue;
+      }
+
       if (rule.type === 'number') {
         if (typeof value === 'string') {
           value = Number(value);
@@ -144,8 +150,12 @@ validator
 // Define the JWT_SECRET as a required string
 validator.string(envEnums.JWT_SECRET).required();
 
-// Define the REDIS_PASSWORD as a required string
-validator.string(envEnums.REDIS_PASSWORD).required();
+// Optional: full Redis connection string (redis:// or rediss://). When set it
+// takes precedence over the discrete REDIS_HOST/PORT/PASSWORD/TLS variables.
+validator.string(envEnums.REDIS_URL);
+
+// Define the REDIS_PASSWORD as an optional string (may be embedded in REDIS_URL)
+validator.string(envEnums.REDIS_PASSWORD);
 
 // Define the REDIS_HOST as a required string
 validator.string(envEnums.REDIS_HOST).default('localhost');

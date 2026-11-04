@@ -30,24 +30,38 @@ export class RedisClientProvider implements OnApplicationShutdown {
   private shutdown = false;
 
   constructor(private readonly configService: ConfigService) {
-    // Coerce config values to their real types. Nest returns env values as
-    // strings unless transformed; node-redis fails when `tls` is 'true' (string)
-    // instead of boolean true, and treats a numeric-string port inconsistently.
-    const host = configService.get<string>(envEnums.REDIS_HOST);
-    const port = Number(configService.get<number>(envEnums.REDIS_PORT));
-    const rawTls = configService.get<string | boolean>(envEnums.REDIS_TLS);
-    const tls = rawTls === true || rawTls === 'true' || rawTls === '1';
+    const url = configService.get<string>(envEnums.REDIS_URL);
+    const reconnectStrategy = (retries: number) =>
+      this.reconnectStrategy(retries);
 
-    this.client = createClient({
-      socket: {
-        host,
-        port,
-        tls,
-        reconnectStrategy: (retries) => this.reconnectStrategy(retries),
-      },
-      username: 'default',
-      password: configService.get<string>(envEnums.REDIS_PASSWORD),
-    });
+    if (url) {
+      // A full connection string (redis:// or rediss://) already carries the
+      // host, port, username, password and TLS mode, so it takes precedence
+      // over the discrete variables. `rediss://` enables TLS automatically.
+      this.client = createClient({
+        url,
+        socket: { reconnectStrategy },
+      });
+    } else {
+      // Coerce config values to their real types. Nest returns env values as
+      // strings unless transformed; node-redis fails when `tls` is 'true' (string)
+      // instead of boolean true, and treats a numeric-string port inconsistently.
+      const host = configService.get<string>(envEnums.REDIS_HOST);
+      const port = Number(configService.get<number>(envEnums.REDIS_PORT));
+      const rawTls = configService.get<string | boolean>(envEnums.REDIS_TLS);
+      const tls = rawTls === true || rawTls === 'true' || rawTls === '1';
+
+      this.client = createClient({
+        socket: {
+          host,
+          port,
+          tls,
+          reconnectStrategy,
+        },
+        username: 'default',
+        password: configService.get<string>(envEnums.REDIS_PASSWORD),
+      });
+    }
 
     this.attachEventHandlers();
     this.ensureConnected();
