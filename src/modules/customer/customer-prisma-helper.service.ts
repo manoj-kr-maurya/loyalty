@@ -86,8 +86,7 @@ export class CustomerPrismaHelperService {
   }
 
   /**
-   * A customer belongs to an organization when they have an order with that
-   * organization or hold at least one wallet in a currency owned by it.
+   * A customer belongs to an organization when their `organizationId` matches.
    * Throws a 404 (not 403) so callers cannot use the endpoint to enumerate
    * customer ids across tenants.
    */
@@ -102,30 +101,12 @@ export class CustomerPrismaHelperService {
       );
     }
 
-    const [order, currencies] = await Promise.all([
-      this.prismaService.customerOrganizationOrder.findFirst({
-        where: { customerId, organizationId },
-        select: { id: true },
-      }),
-      this.prismaService.currency.findMany({
-        where: { organizationId },
-        select: { code: true },
-      }),
-    ]);
+    const customer = await this.prismaService.customer.findFirst({
+      where: { id: customerId, organizationId },
+      select: { id: true },
+    });
 
-    if (order) return;
-
-    if (currencies.length > 0) {
-      const wallet = await this.prismaService.customerWallet.findFirst({
-        where: {
-          customerId,
-          organizationId,
-          currencyCode: { in: currencies.map((currency) => currency.code) },
-        },
-        select: { id: true },
-      });
-      if (wallet) return;
-    }
+    if (customer) return;
 
     throw new CommonException(
       'Customer not found in organization',

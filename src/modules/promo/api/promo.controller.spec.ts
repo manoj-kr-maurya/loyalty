@@ -15,6 +15,11 @@ import { OrganizationApiKeyGuard } from 'src/modules/auth/guards/organization-ap
 describe('PromoController', () => {
   let controller: PromoController;
   let promoService: jest.Mocked<PromoService>;
+  const orgAuth = {
+    type: 'organization',
+    organizationId: 'org-1',
+    scopes: ['*'],
+  } as any;
 
   const mockPromotion: PromotionRecord = {
     id: 'promo-1',
@@ -428,10 +433,13 @@ describe('PromoController', () => {
 
   describe('getPromotionById', () => {
     it('should return a promotion by ID', async () => {
-      const result = await controller.getPromotionById('promo-1');
+      const result = await controller.getPromotionById('promo-1', orgAuth);
 
       expect(result).toEqual(mockPromotion);
-      expect(promoService.getPromotionById).toHaveBeenCalledWith('promo-1');
+      expect(promoService.getPromotionById).toHaveBeenCalledWith(
+        'promo-1',
+        'org-1',
+      );
     });
   });
 
@@ -484,17 +492,20 @@ describe('PromoController', () => {
     });
 
     it('should get customer coupons', async () => {
-      const result = await controller.getCustomerCoupons('cust-1');
+      const result = await controller.getCustomerCoupons('cust-1', orgAuth);
 
       expect(result).toEqual([mockCoupon]);
-      expect(promoService.getCustomerCoupons).toHaveBeenCalledWith('cust-1');
+      expect(promoService.getCustomerCoupons).toHaveBeenCalledWith(
+        'cust-1',
+        'org-1',
+      );
     });
 
     it('should get coupon by block ID', async () => {
-      const result = await controller.getCoupon('CPN-1');
+      const result = await controller.getCoupon('CPN-1', orgAuth);
 
       expect(result).toEqual(mockCoupon);
-      expect(promoService.getCoupon).toHaveBeenCalledWith('CPN-1');
+      expect(promoService.getCoupon).toHaveBeenCalledWith('CPN-1', 'org-1');
     });
   });
 
@@ -527,14 +538,17 @@ describe('PromoController', () => {
     });
 
     it('should get claim by ID', async () => {
-      const result = await controller.getClaimById('clm-1');
+      const result = await controller.getClaimById('clm-1', orgAuth);
 
       expect(result).toEqual(mockClaim);
-      expect(promoService.getClaimById).toHaveBeenCalledWith('clm-1');
+      expect(promoService.getClaimById).toHaveBeenCalledWith('clm-1', 'org-1');
     });
 
     it('should get customer claim summary', async () => {
-      const result = await controller.getCustomerClaimSummary('cust-1');
+      const result = await controller.getCustomerClaimSummary(
+        'cust-1',
+        orgAuth,
+      );
 
       expect(result).toEqual({
         totalClaimed: 500,
@@ -543,6 +557,7 @@ describe('PromoController', () => {
       });
       expect(promoService.getCustomerClaimSummary).toHaveBeenCalledWith(
         'cust-1',
+        'org-1',
       );
     });
   });

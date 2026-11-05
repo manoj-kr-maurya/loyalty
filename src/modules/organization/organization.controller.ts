@@ -88,7 +88,7 @@ export class OrganizationController {
     return {
       status: CallStatuses.Success,
       code: OrganizationResponseCodes.Organization_Verified,
-      data: { organization, metaFlags },
+      data: { organization: redactSecrets(organization), metaFlags },
     };
   }
 

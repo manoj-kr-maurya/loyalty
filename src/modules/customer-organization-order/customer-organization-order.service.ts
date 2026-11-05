@@ -651,51 +651,49 @@ export class CustomerOrganizationOrderService {
     form: UpdateCustomerOrganizationOrderDto,
     caller: JwtTokenPayload,
   ) {
-    return await this.prismaService.$transaction(async () => {
-      const order: CustomerOrganizationOrderWithDetails =
-        await this.customerOrganizationOrderPrismaHelperService.findCustomerOrganizationOrderWithAllNestedDetails(
-          { id: form.orderId },
-        );
-
-      if (!order) {
-        throw new BadRequestException('Order not found');
-      }
-
-      // Authorization (fixes C4): only the owning organization (or its
-      // admin/shop) may transition an order's status.
-      await this.assertCanUpdateOrder(caller, order.organizationId);
-
-      if (!validTransitions[order.status].includes(form.status)) {
-        throw new BadRequestException(
-          `Invalid status transition from ${order.status} to ${form.status}`,
-        );
-      }
-
-      order.status = form.status;
-
-      await this.customerOrganizationOrderPrismaHelperService.createStatusHistory(
-        {
-          status: form.status,
-          timestamp: new Date(),
-          customerOrganizationOrder: { connect: { id: order.id } },
-        },
-        this.prismaService,
+    const order: CustomerOrganizationOrderWithDetails =
+      await this.customerOrganizationOrderPrismaHelperService.findCustomerOrganizationOrderWithAllNestedDetails(
+        { id: form.orderId },
       );
 
-      if (form.status === CustomerOrganizationOrderStatus.COMPLETED) {
-        await this.handleOrderCompletion(order);
-      } else if (
-        form.status === CustomerOrganizationOrderStatus.CANCELLED ||
-        form.status === CustomerOrganizationOrderStatus.FAILED
-      ) {
-        await this.handleOrderCancellationOrFailure(order);
-      }
+    if (!order) {
+      throw new BadRequestException('Order not found');
+    }
 
-      return await this.customerOrganizationOrderPrismaHelperService.updateCustomerOrganizationOrder(
-        { id: order.id },
-        { status: form.status },
+    // Authorization (fixes C4): only the owning organization (or its
+    // admin/shop) may transition an order's status.
+    await this.assertCanUpdateOrder(caller, order.organizationId);
+
+    if (!validTransitions[order.status].includes(form.status)) {
+      throw new BadRequestException(
+        `Invalid status transition from ${order.status} to ${form.status}`,
       );
-    });
+    }
+
+    order.status = form.status;
+
+    await this.customerOrganizationOrderPrismaHelperService.createStatusHistory(
+      {
+        status: form.status,
+        timestamp: new Date(),
+        customerOrganizationOrder: { connect: { id: order.id } },
+      },
+      this.prismaService,
+    );
+
+    if (form.status === CustomerOrganizationOrderStatus.COMPLETED) {
+      await this.handleOrderCompletion(order);
+    } else if (
+      form.status === CustomerOrganizationOrderStatus.CANCELLED ||
+      form.status === CustomerOrganizationOrderStatus.FAILED
+    ) {
+      await this.handleOrderCancellationOrFailure(order);
+    }
+
+    return await this.customerOrganizationOrderPrismaHelperService.updateCustomerOrganizationOrder(
+      { id: order.id },
+      { status: form.status },
+    );
   }
 
   /**

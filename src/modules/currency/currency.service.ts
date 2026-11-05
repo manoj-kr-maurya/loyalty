@@ -495,7 +495,9 @@ export class CurrencyService {
       throw new CommonException(
         `Payment amount ${paid} does not match the expected amount ${expected.toFixed(
           2,
-        )}`,
+        )} (amount × exchange rate). Send paymentAmount ${expected.toFixed(
+          2,
+        )}, or change the amount/rate.`,
         StatusCodes.BAD_REQUEST,
       );
     }

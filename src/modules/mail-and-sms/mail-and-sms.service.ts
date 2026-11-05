@@ -76,7 +76,7 @@ export class MailAndSmsService {
 
   sendOtpToMail(to: string, otp: string) {
     return this.mailerService.sendMail({
-      from: process.env.SENDER_EMAIl,
+      from: this.configService.get(envEnums.SENDER_MAIL),
       to,
       subject: 'OTP for jas-loyalty-engine-micro',
       html: `

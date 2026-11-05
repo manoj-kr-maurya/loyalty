@@ -502,13 +502,19 @@ export class PromoService {
   }
 
   /** Get all coupons for a customer. */
-  async getCustomerCoupons(customerId: string): Promise<CouponBlock[]> {
-    return this.couponManager.getCustomerCoupons(customerId);
+  async getCustomerCoupons(
+    customerId: string,
+    organizationId?: string,
+  ): Promise<CouponBlock[]> {
+    return this.couponManager.getCustomerCoupons(customerId, organizationId);
   }
 
   /** Get a specific coupon by block ID. */
-  async getCoupon(blockId: string): Promise<CouponBlock | null> {
-    return this.couponManager.getCoupon(blockId);
+  async getCoupon(
+    blockId: string,
+    organizationId?: string,
+  ): Promise<CouponBlock | null> {
+    return this.couponManager.getCoupon(blockId, organizationId);
   }
 
   // ─── Claim Operations ──────────────────────────────────────────
@@ -546,13 +552,19 @@ export class PromoService {
   }
 
   /** Get a single claim by ID. */
-  async getClaimById(id: string): Promise<ClaimRecord | null> {
-    return this.claimManager.getClaimById(id);
+  async getClaimById(
+    id: string,
+    organizationId?: string,
+  ): Promise<ClaimRecord | null> {
+    return this.claimManager.getClaimById(id, organizationId);
   }
 
   /** Get claim summary for a customer. */
-  async getCustomerClaimSummary(customerId: string) {
-    return this.claimManager.getCustomerClaimSummary(customerId);
+  async getCustomerClaimSummary(customerId: string, organizationId?: string) {
+    return this.claimManager.getCustomerClaimSummary(
+      customerId,
+      organizationId,
+    );
   }
 
   // ─── Promotion Queries ─────────────────────────────────────────
@@ -793,15 +805,18 @@ export class PromoService {
   }
 
   /** Get a single promotion by ID. */
-  async getPromotionById(id: string): Promise<any> {
-    return this.prisma.rewardProgram.findUnique({
-      where: { id },
+  async getPromotionById(id: string, organizationId?: string): Promise<any> {
+    return this.prisma.rewardProgram.findFirst({
+      where: {
+        id,
+        ...(organizationId ? { organizationId } : {}),
+      },
       include: { rules: true },
     });
   }
 
   /** List promotions in raw RewardProgram shape for the admin dashboard. */
-  async listPromotions(organizationId: string): Promise<any[]> {
+  async listPromotions(organizationId?: string): Promise<any[]> {
     return this.prisma.rewardProgram.findMany({
       where: {
         ...(organizationId ? { organizationId } : {}),

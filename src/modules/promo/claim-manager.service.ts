@@ -173,9 +173,15 @@ export class ClaimManagerService {
   /**
    * Get a single claim by ID.
    */
-  async getClaimById(id: string): Promise<ClaimRecord | null> {
-    const ledger = await this.prisma.rewardLedger.findUnique({
-      where: { id },
+  async getClaimById(
+    id: string,
+    organizationId?: string,
+  ): Promise<ClaimRecord | null> {
+    const ledger = await this.prisma.rewardLedger.findFirst({
+      where: {
+        id,
+        ...(organizationId ? { program: { organizationId } } : {}),
+      },
     });
 
     if (!ledger) return null;
@@ -185,7 +191,10 @@ export class ClaimManagerService {
   /**
    * Get total claimed amount for a customer within a program.
    */
-  async getTotalClaimed(customerId: string, programId: string): Promise<number> {
+  async getTotalClaimed(
+    customerId: string,
+    programId: string,
+  ): Promise<number> {
     const result = await this.prisma.rewardLedger.aggregate({
       where: {
         customerId,
@@ -201,22 +210,26 @@ export class ClaimManagerService {
   /**
    * Get claim summary for a customer across all programs.
    */
-  async getCustomerClaimSummary(customerId: string): Promise<{
+  async getCustomerClaimSummary(
+    customerId: string,
+    organizationId?: string,
+  ): Promise<{
     totalClaimed: number;
     totalReversed: number;
     claimCount: number;
   }> {
+    const scope = organizationId ? { program: { organizationId } } : {};
     const [credited, reversed, count] = await Promise.all([
       this.prisma.rewardLedger.aggregate({
-        where: { customerId, status: 'CREDITED' },
+        where: { customerId, status: 'CREDITED', ...scope },
         _sum: { amount: true },
       }),
       this.prisma.rewardLedger.aggregate({
-        where: { customerId, status: 'REVERSED' },
+        where: { customerId, status: 'REVERSED', ...scope },
         _sum: { amount: true },
       }),
       this.prisma.rewardLedger.count({
-        where: { customerId, status: 'CREDITED' },
+        where: { customerId, status: 'CREDITED', ...scope },
       }),
     ]);
 
@@ -247,7 +260,9 @@ export class ClaimManagerService {
     };
   }
 
-  private mapLedgerStatus(dbStatus: string): 'PENDING' | 'CONFIRMED' | 'REVOKED' {
+  private mapLedgerStatus(
+    dbStatus: string,
+  ): 'PENDING' | 'CONFIRMED' | 'REVOKED' {
     switch (dbStatus) {
       case 'PENDING':
         return 'PENDING';

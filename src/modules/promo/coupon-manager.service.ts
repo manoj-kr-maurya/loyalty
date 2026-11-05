@@ -52,7 +52,9 @@ export class CouponManagerService {
    * Allocate a coupon to a customer. Creates a RewardBlock in PENDING state.
    */
   async allocate(allocation: CouponAllocation): Promise<CouponBlock> {
-    const blockId = `CPN-${allocation.programId}-${allocation.customerId}-${Date.now()}`;
+    const blockId = `CPN-${allocation.programId}-${
+      allocation.customerId
+    }-${Date.now()}`;
 
     const block = await this.prisma.rewardBlock.create({
       data: {
@@ -100,7 +102,9 @@ export class CouponManagerService {
     }
 
     if (existing.status !== 'PENDING') {
-      this.logger.warn(`Coupon ${blockId} is not in PENDING state: ${existing.status}`);
+      this.logger.warn(
+        `Coupon ${blockId} is not in PENDING state: ${existing.status}`,
+      );
       return null;
     }
 
@@ -140,7 +144,9 @@ export class CouponManagerService {
     }
 
     if (existing.status === 'CANCELLED' || existing.status === 'EXPIRED') {
-      this.logger.warn(`Coupon ${blockId} already in terminal state: ${existing.status}`);
+      this.logger.warn(
+        `Coupon ${blockId} already in terminal state: ${existing.status}`,
+      );
       return null;
     }
 
@@ -234,9 +240,15 @@ export class CouponManagerService {
   /**
    * Get all coupons for a customer.
    */
-  async getCustomerCoupons(customerId: string): Promise<CouponBlock[]> {
+  async getCustomerCoupons(
+    customerId: string,
+    organizationId?: string,
+  ): Promise<CouponBlock[]> {
     const blocks = await this.prisma.rewardBlock.findMany({
-      where: { customerId },
+      where: {
+        customerId,
+        ...(organizationId ? { program: { organizationId } } : {}),
+      },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -259,9 +271,15 @@ export class CouponManagerService {
   /**
    * Get a specific coupon by its block ID.
    */
-  async getCoupon(blockId: string): Promise<CouponBlock | null> {
-    const block = await this.prisma.rewardBlock.findUnique({
-      where: { blockId },
+  async getCoupon(
+    blockId: string,
+    organizationId?: string,
+  ): Promise<CouponBlock | null> {
+    const block = await this.prisma.rewardBlock.findFirst({
+      where: {
+        blockId,
+        ...(organizationId ? { program: { organizationId } } : {}),
+      },
     });
 
     if (!block) return null;

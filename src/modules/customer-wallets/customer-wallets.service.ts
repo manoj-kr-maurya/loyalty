@@ -78,7 +78,11 @@ export class CustomerWalletService {
       customerId,
       organizationId,
       currencyCode: { in: orgCurrencyCodes },
-      availableBalance: { gt: 0 },
+      OR: [
+        { availableBalance: { gt: 0 } },
+        { pendingBalance: { gt: 0 } },
+        { blockedBalance: { gt: 0 } },
+      ],
     };
 
     // Get wallets with pagination in a single query

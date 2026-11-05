@@ -9,6 +9,7 @@ describe('CustomerPrismaHelperService', () => {
 
   const mockPrismaService = {
     customer: {
+      findFirst: jest.fn(),
       findFirstOrThrow: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
@@ -66,44 +67,21 @@ describe('CustomerPrismaHelperService', () => {
   });
 
   describe('assertCustomerBelongsToOrganization', () => {
-    it('accepts a customer with an order in the organization', async () => {
-      mockPrismaService.customerOrganizationOrder.findFirst.mockResolvedValue({
-        id: 'order-1',
-      });
-      mockPrismaService.currency.findMany.mockResolvedValue([]);
+    it('accepts a customer scoped to the organization', async () => {
+      mockPrismaService.customer.findFirst.mockResolvedValue({ id: 'cust-1' });
 
       await expect(
         helper.assertCustomerBelongsToOrganization('cust-1', 'org-a'),
       ).resolves.toBeUndefined();
-    });
 
-    it('scopes the wallet fallback lookup to the organization', async () => {
-      mockPrismaService.customerOrganizationOrder.findFirst.mockResolvedValue(
-        null,
-      );
-      mockPrismaService.currency.findMany.mockResolvedValue([{ code: 'PTS' }]);
-      mockPrismaService.customerWallet.findFirst.mockResolvedValue({
-        id: 'wallet-1',
-      });
-
-      await helper.assertCustomerBelongsToOrganization('cust-1', 'org-a');
-
-      expect(mockPrismaService.customerWallet.findFirst).toHaveBeenCalledWith({
-        where: {
-          customerId: 'cust-1',
-          organizationId: 'org-a',
-          currencyCode: { in: ['PTS'] },
-        },
+      expect(mockPrismaService.customer.findFirst).toHaveBeenCalledWith({
+        where: { id: 'cust-1', organizationId: 'org-a' },
         select: { id: true },
       });
     });
 
-    it('rejects a customer whose only wallet belongs to another organization', async () => {
-      mockPrismaService.customerOrganizationOrder.findFirst.mockResolvedValue(
-        null,
-      );
-      mockPrismaService.currency.findMany.mockResolvedValue([{ code: 'PTS' }]);
-      mockPrismaService.customerWallet.findFirst.mockResolvedValue(null);
+    it('rejects a customer belonging to another organization', async () => {
+      mockPrismaService.customer.findFirst.mockResolvedValue(null);
 
       await expect(
         helper.assertCustomerBelongsToOrganization('cust-1', 'org-a'),

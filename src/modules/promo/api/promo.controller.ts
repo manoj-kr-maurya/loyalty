@@ -8,13 +8,11 @@ import {
   UseGuards,
   UsePipes,
 } from '@nestjs/common';
-import {
-  ApiTags,
-  ApiOperation,
-  ApiQuery,
-  ApiSecurity,
-} from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiQuery, ApiSecurity } from '@nestjs/swagger';
 import { OrganizationApiKeyGuard } from 'src/modules/auth/guards/organization-api-key.guard';
+import { CurrentAuth } from 'src/modules/auth/decorators/current-auth.decorator';
+import { OrganizationAuthContext } from 'src/modules/auth/api-key.service';
+import { resolveOrganizationId } from 'src/modules/auth/resolve-organization-id';
 import { JoiValidationPipe } from 'src/common/pipes/joi-validation.pipe';
 import { buildSchemaForOrg } from 'src/common/validation/validation-policies';
 import {
@@ -52,6 +50,16 @@ export class PromoController {
     private readonly promoService: PromoService,
     private readonly couponCodeService: CouponCodeService,
   ) {}
+
+  private scopeOrganization(
+    auth: OrganizationAuthContext,
+    requestedOrganizationId?: string,
+  ): string | undefined {
+    if (auth?.type === 'platform') {
+      return requestedOrganizationId;
+    }
+    return resolveOrganizationId(auth, requestedOrganizationId);
+  }
 
   @Post('/create')
   @UsePipes(
@@ -101,14 +109,22 @@ export class PromoController {
   @Get('/list')
   @ApiOperation({ summary: 'List promotions in raw shape for admin dashboard' })
   @ApiQuery({ name: 'organizationId', required: true })
-  async listPromotions(@Query('organizationId') organizationId: string) {
-    return this.promoService.listPromotions(organizationId);
+  async listPromotions(
+    @Query('organizationId') organizationId: string,
+    @CurrentAuth() auth: OrganizationAuthContext,
+  ) {
+    return this.promoService.listPromotions(
+      this.scopeOrganization(auth, organizationId),
+    );
   }
 
   @Get('/:id')
   @ApiOperation({ summary: 'Get a promotion by ID' })
-  async getPromotionById(@Param('id') id: string) {
-    return this.promoService.getPromotionById(id);
+  async getPromotionById(
+    @Param('id') id: string,
+    @CurrentAuth() auth: OrganizationAuthContext,
+  ) {
+    return this.promoService.getPromotionById(id, this.scopeOrganization(auth));
   }
 
   @Post('/:id/update')
@@ -180,14 +196,23 @@ export class PromoController {
 
   @Get('/coupon/customer/:customerId')
   @ApiOperation({ summary: 'Get all coupons for a customer' })
-  async getCustomerCoupons(@Param('customerId') customerId: string) {
-    return this.promoService.getCustomerCoupons(customerId);
+  async getCustomerCoupons(
+    @Param('customerId') customerId: string,
+    @CurrentAuth() auth: OrganizationAuthContext,
+  ) {
+    return this.promoService.getCustomerCoupons(
+      customerId,
+      this.scopeOrganization(auth),
+    );
   }
 
   @Get('/coupon/:blockId')
   @ApiOperation({ summary: 'Get a coupon by block ID' })
-  async getCoupon(@Param('blockId') blockId: string) {
-    return this.promoService.getCoupon(blockId);
+  async getCoupon(
+    @Param('blockId') blockId: string,
+    @CurrentAuth() auth: OrganizationAuthContext,
+  ) {
+    return this.promoService.getCoupon(blockId, this.scopeOrganization(auth));
   }
 
   @Post('/claim/record')
@@ -208,14 +233,23 @@ export class PromoController {
 
   @Get('/claim/:id')
   @ApiOperation({ summary: 'Get a claim by ID' })
-  async getClaimById(@Param('id') id: string) {
-    return this.promoService.getClaimById(id);
+  async getClaimById(
+    @Param('id') id: string,
+    @CurrentAuth() auth: OrganizationAuthContext,
+  ) {
+    return this.promoService.getClaimById(id, this.scopeOrganization(auth));
   }
 
   @Get('/claim/summary/:customerId')
   @ApiOperation({ summary: 'Get claim summary for a customer' })
-  async getCustomerClaimSummary(@Param('customerId') customerId: string) {
-    return this.promoService.getCustomerClaimSummary(customerId);
+  async getCustomerClaimSummary(
+    @Param('customerId') customerId: string,
+    @CurrentAuth() auth: OrganizationAuthContext,
+  ) {
+    return this.promoService.getCustomerClaimSummary(
+      customerId,
+      this.scopeOrganization(auth),
+    );
   }
 
   // ─── Coupon Code (Auto-generated) ─────────────────────────────

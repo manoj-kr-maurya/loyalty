@@ -518,7 +518,10 @@ describe('PromoService', () => {
       const result = await service.getCustomerCoupons('cust-1');
 
       expect(result).toEqual([mockCoupon]);
-      expect(couponManager.getCustomerCoupons).toHaveBeenCalledWith('cust-1');
+      expect(couponManager.getCustomerCoupons).toHaveBeenCalledWith(
+        'cust-1',
+        undefined,
+      );
     });
 
     it('should return coupon by block ID', async () => {
@@ -527,6 +530,7 @@ describe('PromoService', () => {
       expect(result).toEqual(mockCoupon);
       expect(couponManager.getCoupon).toHaveBeenCalledWith(
         'CPN-prog1-cust1-123',
+        undefined,
       );
     });
   });
@@ -581,7 +585,10 @@ describe('PromoService', () => {
       const result = await service.getClaimById('clm-1');
 
       expect(result).toEqual(mockClaim);
-      expect(claimManager.getClaimById).toHaveBeenCalledWith('clm-1');
+      expect(claimManager.getClaimById).toHaveBeenCalledWith(
+        'clm-1',
+        undefined,
+      );
     });
 
     it('should get customer claim summary', async () => {
@@ -594,6 +601,7 @@ describe('PromoService', () => {
       });
       expect(claimManager.getCustomerClaimSummary).toHaveBeenCalledWith(
         'cust-1',
+        undefined,
       );
     });
   });
@@ -617,11 +625,11 @@ describe('PromoService', () => {
     });
 
     it('should get promotion by ID', async () => {
-      prisma.rewardProgram.findUnique.mockResolvedValue(mockPromotion as any);
+      prisma.rewardProgram.findFirst.mockResolvedValue(mockPromotion as any);
       const result = await service.getPromotionById('promo-1');
 
       expect(result).toEqual(mockPromotion);
-      expect(prisma.rewardProgram.findUnique).toHaveBeenCalledWith({
+      expect(prisma.rewardProgram.findFirst).toHaveBeenCalledWith({
         where: { id: 'promo-1' },
         include: { rules: true },
       });
